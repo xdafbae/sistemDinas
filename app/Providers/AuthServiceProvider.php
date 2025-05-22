@@ -11,11 +11,19 @@ class AuthServiceProvider extends ServiceProvider
         // 'App\Models\Model' => 'App\Policies\ModelPolicy',
     ];
 
-    public function boot()
+    public function boot(): void
     {
         $this->registerPolicies();
+
+        // Implicitly grant "Super Admin" role all permissions
+        // This works granting all abilities to a user that has the "superadmin" role
         Gate::before(function ($user, $ability) {
-            return $user->hasRole('superadmin') ? true : null;
+            // Pastikan nama role 'superadmin' ditulis dengan benar (case-sensitive)
+            // dan sesuai dengan yang ada di database Anda.
+            if ($user->hasRole('superadmin')) {
+                return true; // Super Admin bisa melakukan apa saja
+            }
+            return null; // Biarkan pengecekan permission/policy lain berjalan untuk role lain
         });
     }
 }

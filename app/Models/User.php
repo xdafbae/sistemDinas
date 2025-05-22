@@ -21,13 +21,14 @@ class User extends Authenticatable
      * @var array<int, string>
      */
     protected $fillable = [
-        'nama', 
-        'gol',  
+        'nama',
+        'gol',
         'jabatan',
         'nomor_hp',
-        'nip',  
+        'nip',
         'email',
         'password',
+        'aktif'
     ];
 
     /**
@@ -45,8 +46,10 @@ class User extends Authenticatable
      *
      * @var array<string, string>
      */
+    // app/Models/User.php
     protected $casts = [
         'email_verified_at' => 'datetime',
-        'password' => 'hashed',
+        'aktif' => 'boolean', // <-- TAMBAHKAN INI
+        'password' => 'hashed', // Jika menggunakan Laravel 9+
     ];
 }
