@@ -30,9 +30,8 @@ class DokumenPerjalananDinasController extends Controller
         if ($request->ajax()) {
             $user = Auth::user();
             $query = PerjalananDinas::with(['operator', 'personil'])
-                ->whereIn('status', ['disetujui', 'selesai']); // Hanya yang sudah disetujui atau selesai
+                ->whereIn('status', ['disetujui', 'selesai']);
 
-            // Filter agar pegawai hanya melihat perjalanannya, sedangkan role lain melihat semua
             if ($user->hasRole('pegawai') && !$user->hasAnyRole(['operator', 'superadmin', 'atasan', 'verifikator'])) {
                 $query->whereHas('personil', function ($q) use ($user) {
                     $q->where('users.id', $user->id);
@@ -41,36 +40,51 @@ class DokumenPerjalananDinasController extends Controller
 
             return DataTables::eloquent($query)
                 ->addIndexColumn()
-                ->addColumn('nomor_spt_display', fn($pd) => $pd->nomor_spt)
-                ->addColumn('tanggal_spt_formatted', fn($pd) => Carbon::parse($pd->tanggal_spt)->translatedFormat('d M Y'))
+                ->addColumn('nomor_spt_display', fn($pd) => $pd->nomor_spt ?? '<em class="text-muted">Belum Ada</em>') // Handle jika nomor SPT belum ada
+                ->addColumn('tanggal_spt_formatted', fn($pd) => $pd->tanggal_spt ? Carbon::parse($pd->tanggal_spt)->translatedFormat('d M Y') : '-')
                 ->addColumn('tujuan_spt_display', fn($pd) => $pd->tujuan_spt)
-                ->addColumn('personil_list', fn($pd) => $pd->personil->pluck('nama')->implode(', '))
+                ->addColumn('personil_list', fn($pd) => Str::limit($pd->personil->pluck('nama')->implode(', '), 50))
                 ->addColumn('tanggal_pelaksanaan', fn($pd) => Carbon::parse($pd->tanggal_mulai)->translatedFormat('d M Y') . ' s/d ' . Carbon::parse($pd->tanggal_selesai)->translatedFormat('d M Y'))
                 ->editColumn('status', function ($perjalanan) {
                     $statusText = str_replace('_', ' ', $perjalanan->status);
                     $statusText = ucwords($statusText);
-                    $badgeClass = 'bg-gradient-secondary'; // Default
+                    $badgeClass = 'bg-gradient-secondary';
                     if ($perjalanan->status === 'disetujui') $badgeClass = 'bg-gradient-success';
                     if ($perjalanan->status === 'selesai') $badgeClass = 'bg-gradient-primary';
+                    if (Str::contains($perjalanan->status, 'revisi')) $badgeClass = 'bg-gradient-warning';
+                    if (Str::contains($perjalanan->status, 'tolak')) $badgeClass = 'bg-gradient-danger';
                     return "<span class='badge {$badgeClass}'>{$statusText}</span>";
                 })
                 ->addColumn('action', function ($perjalanan) {
                     if (!in_array($perjalanan->status, ['disetujui', 'selesai'])) {
-                        return '<span class="badge bg-gradient-warning">Menunggu Penyelesaian</span>';
+                        return '<span class="badge bg-gradient-warning">Menunggu Penyelesaian Dokumen</span>';
                     }
+                    if (empty($perjalanan->nomor_spt)) { // Jika nomor SPT belum ada (seharusnya tidak terjadi jika status disetujui/selesai)
+                        return '<span class="badge bg-gradient-secondary">Nomor SPT Belum Terbit</span>';
+                    }
+
                     $sptPdfUrl = route('dokumen.spt.download', ['perjalananDinas' => $perjalanan->id, 'format' => 'pdf']);
                     $sptWordUrl = route('dokumen.spt.download', ['perjalananDinas' => $perjalanan->id, 'format' => 'word']);
                     $sppdPdfUrl = route('dokumen.sppd.download', ['perjalananDinas' => $perjalanan->id, 'format' => 'pdf']);
 
-                    // Untuk SPPD Word, kita bisa buat link per personil jika diperlukan
-                    // atau link umum yang akan men-download untuk personil pertama/yang login
-                    $sppdWordUrl = route('dokumen.sppd.download', ['perjalananDinas' => $perjalanan->id, 'format' => 'word']);
-                    // Jika ingin link per personil:
-                    // $sppdWordButtons = '';
-                    // foreach($perjalanan->personil as $p) {
-                    //     $url = route('dokumen.sppd.download', ['perjalananDinas' => $perjalanan->id, 'format' => 'word', 'personil_id' => $p->id]);
-                    //     $sppdWordButtons .= '<a href="'.$url.'" class="btn btn-warning btn-sm me-1" target="_blank" data-bs-toggle="tooltip" title="SPPD Word '.htmlspecialchars($p->nama).'"><i class="fas fa-file-word"></i></a>';
-                    // }
+                    $sppdWordButtons = '';
+                    if ($perjalanan->personil->count() == 1) {
+                        $p = $perjalanan->personil->first();
+                        $url = route('dokumen.sppd.download', ['perjalananDinas' => $perjalanan->id, 'format' => 'word', 'personil_id' => $p->id]);
+                        $sppdWordButtons = '<a href="' . $url . '" class="btn btn-warning btn-sm" target="_blank" data-bs-toggle="tooltip" title="Download SPPD Word ' . htmlspecialchars($p->nama) . '"><i class="fas fa-file-word"></i> SPPD DOCX</a>';
+                    } elseif ($perjalanan->personil->count() > 1) {
+                        $sppdWordButtons = '<div class="btn-group btn-group-sm">
+                                              <button type="button" class="btn btn-warning dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" data-bs-toggle="tooltip" title="Download SPPD Word per Personil">
+                                                <i class="fas fa-file-word"></i> SPPD DOCX
+                                              </button>
+                                              <ul class="dropdown-menu">';
+                        foreach ($perjalanan->personil as $p) {
+                            $url = route('dokumen.sppd.download', ['perjalananDinas' => $perjalanan->id, 'format' => 'word', 'personil_id' => $p->id]);
+                            $sppdWordButtons .= '<li><a class="dropdown-item" href="' . $url . '" target="_blank">Untuk: ' . htmlspecialchars($p->nama) . '</a></li>';
+                        }
+                        $sppdWordButtons .= '</ul></div>';
+                    }
+
 
                     return '
                         <div class="btn-group btn-group-sm mb-1" role="group" aria-label="SPT Actions">
@@ -79,12 +93,11 @@ class DokumenPerjalananDinasController extends Controller
                         </div>
                         <div class="btn-group btn-group-sm" role="group" aria-label="SPPD Actions">
                             <a href="' . $sppdPdfUrl . '" class="btn btn-danger" target="_blank" data-bs-toggle="tooltip" title="Download SPPD (PDF)"><i class="fas fa-file-pdf"></i> SPPD PDF</a>
-                            <a href="' . $sppdWordUrl . '" class="btn btn-warning" target="_blank" data-bs-toggle="tooltip" title="Download SPPD (Word)"><i class="fas fa-file-word"></i> SPPD DOCX</a>
-        
+                            ' . $sppdWordButtons . '
                         </div>
                     ';
                 })
-                ->rawColumns(['action', 'status'])
+                ->rawColumns(['action', 'status', 'nomor_spt_display'])
                 ->make(true);
         }
         return view('perjalanan_dinas.dokumen.index');
@@ -231,7 +244,6 @@ class DokumenPerjalananDinasController extends Controller
 
     public function downloadSPPD(Request $request, PerjalananDinas $perjalananDinas, $format = 'pdf')
     {
-        // ... (Otorisasi, data Kadis, kodeRekening sama) ...
         $user = Auth::user();
         $isPersonilDalamPerjalanan = $perjalananDinas->personil()->where('users.id', $user->id)->exists();
         if (!$isPersonilDalamPerjalanan && !$user->hasAnyRole(['operator', 'superadmin', 'atasan', 'verifikator'])) {
@@ -240,16 +252,21 @@ class DokumenPerjalananDinasController extends Controller
         if (!in_array($perjalananDinas->status, ['disetujui', 'selesai'])) {
             return redirect()->back()->with('error', 'SPPD belum bisa diunduh karena status perjalanan dinas belum disetujui/selesai.');
         }
+        if (empty($perjalananDinas->nomor_spt)) { // Perlu nomor SPT untuk SPPD
+            return redirect()->back()->with('error', 'Nomor SPT belum diterbitkan, SPPD tidak bisa digenerate.');
+        }
+
+
         $namaKadis = config('constants.kadis.nama', 'ROMY LESMANA DERMAWAN, AP, M.Si');
         $pangkatKadis = config('constants.kadis.pangkat', 'Pembina Utama Muda (IV/c)');
         $nipKadis = config('constants.kadis.nip', '197402021993031004');
-        $kodeRekening = '2.16.01.2.06.09';
+        $kodeRekening = '2.16.01.2.06.09'; // Default
         preg_match('/kode rekening ([\d\.]+)/i', $perjalananDinas->dasar_spt, $matches);
         if (isset($matches[1])) {
             $kodeRekening = $matches[1];
         }
 
-        $dataForPdf = [ /* ... (sama) ... */
+        $dataForPdf = [
             'perjalananDinas' => $perjalananDinas->load('personil'),
             'namaKadis' => $namaKadis,
             'pangkatKadis' => $pangkatKadis,
@@ -260,10 +277,9 @@ class DokumenPerjalananDinasController extends Controller
         $nomorSPTClean = Str::slug($perjalananDinas->nomor_spt, '-');
 
         if (strtolower($format) === 'pdf') {
-            // ... (Logika PDF sama) ...
             try {
                 Pdf::setOption(['isHtml5ParserEnabled' => true, 'isRemoteEnabled' => true, 'defaultFont' => 'serif']);
-                $pdf = Pdf::loadView('pdf.sppd', $dataForPdf);
+                $pdf = Pdf::loadView('pdf.sppd', $dataForPdf); // Template sppd.blade.php akan loop personil
                 return $pdf->download('SPPD-Kolektif-' . $nomorSPTClean . '.pdf');
             } catch (\Exception $e) {
                 Log::error("Error generating SPPD PDF: " . $e->getMessage() . " File: " . $e->getFile() . " Line: " . $e->getLine());
@@ -272,29 +288,43 @@ class DokumenPerjalananDinasController extends Controller
         } elseif (strtolower($format) === 'word') {
             $personilUntukSPPD = null;
             $personilIdDiminta = $request->query('personil_id');
+
             if ($personilIdDiminta) {
                 $personilUntukSPPD = $perjalananDinas->personil()->find($personilIdDiminta);
+                if (!$personilUntukSPPD) {
+                    return redirect()->back()->with('error', 'Personil yang diminta untuk SPPD Word tidak valid untuk perjalanan dinas ini.');
+                }
             } elseif ($isPersonilDalamPerjalanan && !$user->hasAnyRole(['operator', 'superadmin', 'atasan', 'verifikator'])) {
                 $personilUntukSPPD = $user;
             } else {
-                $personilUntukSPPD = $perjalananDinas->personil()->first();
+                // Jika admin dan tidak ada personil_id, bisa pilih default atau error
+                if ($perjalananDinas->personil->isEmpty()) {
+                    return redirect()->back()->with('error', 'Tidak ada personil yang ditugaskan untuk SPPD ini.');
+                }
+                $personilUntukSPPD = $perjalananDinas->personil->first();
             }
-            if (!$personilUntukSPPD) {
-                return redirect()->back()->with('error', 'Personil untuk SPPD Word tidak dapat ditentukan atau tidak valid.');
-            }
+
 
             try {
                 $templatePath = storage_path('app/templates/template_sppd.docx');
-                // ... (cek file exists) ...
+                if (!Storage::disk('local')->exists('templates/template_sppd.docx')) {
+                    Log::error('Template SPPD Word tidak ditemukan di: ' . $templatePath);
+                    return redirect()->back()->with('error', 'Template dokumen Word SPPD tidak ditemukan.');
+                }
                 $templateProcessor = new TemplateProcessor($templatePath);
 
-                // Mengisi placeholder SPPD
+                // --- Mengisi Placeholder SPPD Sesuai Gambar Baru ---
+
+                // Poin 1 (Pejabat yang memberi perintah) - Biasanya teks statis di template
+                // $templateProcessor->setValue('PEJABAT_PERINTAH', 'KEPALA DINAS KOMUNIKASI DAN INFORMATIKA');
+
+                // Poin 2
                 $templateProcessor->setValue('NAMA_PEGAWAI_SPPD', htmlspecialchars($personilUntukSPPD->nama ?? 'Pegawai Contoh'));
 
-                // --- POIN 3 ---
-                $poin3_a = "a. " . htmlspecialchars($personilUntukSPPD->gol ?? 'III/a');
+                // Poin 3 (Pangkat, Jabatan, Tingkat Biaya - Digabung)
+                $poin3_a = "a. " . htmlspecialchars($personilUntukSPPD->gol ?? 'III/a'); // "AIII" di gambar, sesuaikan format jika perlu
                 $poin3_b = "b. " . htmlspecialchars($personilUntukSPPD->jabatan ?? 'Staf Pelaksana');
-                $poin3_c = "c. " . htmlspecialchars($personilUntukSPPD->tingkat_biaya ?? '-'); // Anda perlu field 'tingkat_biaya' atau logika mapping
+                $poin3_c = "c. " . htmlspecialchars($personilUntukSPPD->tingkat_biaya_sppd ?? '-'); // Anda perlu field/logika untuk ini
                 $templateProcessor->setValue('POIN_3_FULL_SPPD', $poin3_a . '<w:br/>' . $poin3_b . '<w:br/>' . $poin3_c);
 
                 // Poin 4
@@ -303,14 +333,14 @@ class DokumenPerjalananDinasController extends Controller
                 // Poin 5
                 $templateProcessor->setValue('ALAT_ANGKUT_SPPD', htmlspecialchars($perjalananDinas->alat_angkut ?? 'Pesawat Udara'));
 
-                // --- POIN 6 ---
-                $poin6_a = "a. Siak Sri Indrapura"; // Sesuai gambar
-                $tempatTujuanLengkapSPPD = htmlspecialchars($perjalananDinas->tujuan_spt ?? 'Di Hotel Aryaduta Medan Jl. Kapten Maulana Lubis No.8 Petisah Tengah, Kota Medan');
-                if ($perjalananDinas->kota_tujuan_id && $perjalananDinas->kota_tujuan_id !== ($perjalananDinas->tujuan_spt ?? '')) { // Hindari duplikasi jika tujuan_spt sudah kota
+                // Poin 6 (Tempat Berangkat dan Tujuan - Digabung)
+                $poin6_a = "a. " . htmlspecialchars($perjalananDinas->tempat_berangkat_sppd ?? 'Siak Sri Indrapura'); // Asumsi ada field ini atau default
+                $tempatTujuanLengkapSPPD = htmlspecialchars($perjalananDinas->tujuan_spt ?? 'Di Hotel Aryaduta Medan...');
+                if ($perjalananDinas->kota_tujuan_id && $perjalananDinas->kota_tujuan_id !== ($perjalananDinas->tujuan_spt ?? '')) {
                     $tempatTujuanLengkapSPPD .= ($perjalananDinas->tujuan_spt ? ', ' : '') . htmlspecialchars($perjalananDinas->kota_tujuan_id);
                 }
                 if ($perjalananDinas->provinsi_tujuan_id) {
-                    if (!empty($tempatTujuanLengkapSPPD)) { // Tambahkan koma jika ada teks sebelumnya
+                    if (!empty($tempatTujuanLengkapSPPD)) {
                         $tempatTujuanLengkapSPPD .= ', ';
                     }
                     $tempatTujuanLengkapSPPD .= 'Provinsi ' . htmlspecialchars($perjalananDinas->provinsi_tujuan_id);
@@ -318,15 +348,13 @@ class DokumenPerjalananDinasController extends Controller
                 $poin6_b = "b. " . $tempatTujuanLengkapSPPD;
                 $templateProcessor->setValue('POIN_6_FULL_SPPD', $poin6_a . '<w:br/>' . $poin6_b);
 
-
-                // --- POIN 7 ---
+                // Poin 7 (Lama, Tgl Berangkat, Tgl Kembali - Digabung)
                 $lamaHariAngka = htmlspecialchars($perjalananDinas->lama_hari ?? '8');
                 $lamaHariTerbilang = htmlspecialchars(TerbilangHelper::terbilang($perjalananDinas->lama_hari ?? 8));
                 $poin7_a = "a. " . $lamaHariAngka . ' (' . $lamaHariTerbilang . ') hari';
                 $poin7_b = "b. " . htmlspecialchars($perjalananDinas->tanggal_mulai ? Carbon::parse($perjalananDinas->tanggal_mulai)->format('d F Y') : '24 May 2025');
                 $poin7_c = "c. " . htmlspecialchars($perjalananDinas->tanggal_selesai ? Carbon::parse($perjalananDinas->tanggal_selesai)->format('d F Y') : '31 May 2025');
                 $templateProcessor->setValue('POIN_7_FULL_SPPD', $poin7_a . '<w:br/>' . $poin7_b . '<w:br/>' . $poin7_c);
-
 
                 // Poin 8
                 $pengikutList = [];
@@ -337,28 +365,33 @@ class DokumenPerjalananDinasController extends Controller
                         }
                     }
                 }
-                $templateProcessor->setValue('PENGIKUT_SPPD_LIST', !empty($pengikutList) ? implode('<w:br/>', $pengikutList) : '- Nihil -');
+                $templateProcessor->setValue('PENGIKUT_SPPD_LIST', !empty($pengikutList) ? implode('<w:br/>', $pengikutList) : '- Nihil -'); // Di gambar "Kepala Dinas Contoh"
 
-
-                // --- POIN 9 ---
+                // Poin 9 (Pembebanan Anggaran - Digabung)
                 $poin9_a = "a. Dinas Komunikasi dan Informatika Kabupaten Siak"; // Sesuai gambar
                 $poin9_b = "b. " . htmlspecialchars($kodeRekening); // $kodeRekening sudah diambil sebelumnya
                 $templateProcessor->setValue('POIN_9_FULL_SPPD', $poin9_a . '<w:br/>' . $poin9_b);
 
-
                 // Poin 10
                 $templateProcessor->setValue('KETERANGAN_LAIN_SPPD', htmlspecialchars($perjalananDinas->keterangan_lain_sppd ?? '-'));
-
 
                 // TTD dan Bagian Belakang (Pastikan placeholder di template Word Anda sesuai)
                 $templateProcessor->setValue('TANGGAL_DIKELUARKAN_SPPD', htmlspecialchars($perjalananDinas->tanggal_spt ? Carbon::parse($perjalananDinas->tanggal_spt)->translatedFormat('d F Y') : '-'));
                 $templateProcessor->setValue('NAMA_KADIS_SPPD', htmlspecialchars($namaKadis));
-                // $templateProcessor->setValue('PANGKAT_KADIS_SPPD', htmlspecialchars($pangkatKadis)); // Jika ada placeholder terpisah
+                $templateProcessor->setValue('PANGKAT_KADIS_SPPD', htmlspecialchars($pangkatKadis)); // Jika ada placeholder terpisah
                 $templateProcessor->setValue('NIP_KADIS_SPPD', htmlspecialchars($nipKadis));
 
-                // Halaman Belakang (sesuaikan placeholder)
+                // Halaman Belakang (sesuaikan nama placeholder jika berbeda)
                 $templateProcessor->setValue('SPPD_NO_BELAKANG', htmlspecialchars($perjalananDinas->nomor_spt . '/SPPD/' . $personilUntukSPPD->id));
-                // ... (placeholder halaman belakang lainnya) ...
+                // ... (placeholder halaman belakang lainnya seperti NAMA_KADIS_BELAKANG, dll.)
+                // ... (Isi placeholder untuk bagian tiba/berangkat II, III, IV dengan titik-titik atau strip)
+                for ($i_sppd_back = 1; $i_sppd_back <= 3; $i_sppd_back++) {
+                    $romawi = ($i_sppd_back == 1 ? 'II' : ($i_sppd_back == 2 ? 'III' : 'IV'));
+                    $templateProcessor->setValue("TIBA_DI_TUJUAN_{$romawi}", '................................');
+                    $templateProcessor->setValue("TGL_TIBA_TUJUAN_{$romawi}", '....................');
+                    // ... dst untuk placeholder kosong lainnya ...
+                }
+                $templateProcessor->setValue('CATATAN_LAIN_LAIN_BELAKANG', '');
 
 
                 $fileName = 'SPPD-' . Str::slug($perjalananDinas->nomor_spt) . '-' . Str::slug($personilUntukSPPD->nama) . '.docx';
@@ -371,5 +404,91 @@ class DokumenPerjalananDinasController extends Controller
                 return redirect()->back()->with('error', 'Gagal membuat file Word SPPD. Silakan cek log.');
             }
         }
+        return redirect()->back()->with('error', 'Format dokumen tidak valid.');
+    }
+
+    public function laporanSPT(Request $request) // Menggunakan DataTable Class Builder
+    {
+        // Jika Anda tidak menggunakan DataTable Class Builder, Anda bisa langsung render view:
+        // return view('perjalanan_dinas.laporan.spt_index');
+
+        // Jika menggunakan DataTable Class Builder (misalnya PerjalananDinasDataTable)
+        // Anda perlu membuat class ini dengan `php artisan datatable:make PerjalananDinas`
+        // dan mengkonfigurasinya. Untuk server-side AJAX di view, cara di bawah lebih umum.
+        // Contoh jika menggunakan DataTable class:
+        // if (class_exists(PerjalananDinasDataTable::class)) {
+        //     $dataTable = app(PerjalananDinasDataTable::class);
+        //     return $dataTable->render('perjalanan_dinas.laporan.spt_index');
+        // }
+        // Jika tidak, fallback ke cara standar
+        return view('perjalanan_dinas.laporan.spt_index');
+    }
+
+    /**
+     * Menyediakan data untuk DataTables pada halaman laporan SPT.
+     */
+    public function dataTableSPT(Request $request)
+    {
+        // Ambil data Perjalanan Dinas yang sudah ada Nomor SPT dan statusnya relevan
+        $query = PerjalananDinas::with(['personil', 'operator'])
+            ->whereNotNull('nomor_spt') // Pastikan nomor SPT sudah ada
+            ->where('nomor_spt', '!=', '') // Pastikan nomor SPT tidak kosong
+            ->whereIn('status', ['disetujui', 'selesai']) // Hanya yang sudah final
+            ->select('perjalanan_dinas.*'); // Pilih semua kolom dari perjalanan_dinas
+
+        // Otorisasi: Superadmin, operator, atasan, verifikator, kadis bisa lihat semua.
+        // Pegawai biasa mungkin hanya yang melibatkan dirinya (jika ini halaman umum, bukan personal)
+        // Untuk laporan umum, biasanya semua ditampilkan jika user punya hak akses.
+        $user = Auth::user();
+        if ($user->hasRole('pegawai') && !$user->hasAnyRole(['operator', 'superadmin', 'atasan', 'verifikator', 'kepala dinas'])) {
+            $query->whereHas('personil', function ($q) use ($user) {
+                $q->where('users.id', $user->id);
+            });
+        }
+
+
+        return DataTables::eloquent($query)
+            ->addIndexColumn()
+            ->editColumn('tanggal_spt', function ($row) {
+                return $row->tanggal_spt ? Carbon::parse($row->tanggal_spt)->translatedFormat('d M Y') : '-';
+            })
+            ->editColumn('jenis_spt', function ($row) {
+                return ucfirst(str_replace('_', ' ', $row->jenis_spt));
+            })
+            ->addColumn('kota_tujuan_display', function ($row) {
+                $tujuan = [];
+                if ($row->tujuan_spt) $tujuan[] = $row->tujuan_spt; // Tempat/Instansi Tujuan Utama
+                if ($row->kota_tujuan_id) $tujuan[] = $row->kota_tujuan_id;
+                // if ($row->provinsi_tujuan_id) $tujuan[] = "Prov. " . $row->provinsi_tujuan_id; // Bisa ditambahkan jika perlu
+                return implode(', ', $tujuan);
+            })
+            ->editColumn('dasar_spt', function ($row) {
+                return Str::limit(strip_tags(str_replace(["\r\n", "\r", "\n"], ' ', $row->dasar_spt)), 50);
+            })
+            ->editColumn('uraian_spt', function ($row) {
+                return Str::limit(strip_tags(str_replace(["\r\n", "\r", "\n"], ' ', $row->uraian_spt)), 50);
+            })
+            ->addColumn('jumlah_personil', function ($row) {
+                return $row->personil->count();
+            })
+            ->addColumn('nama_personil', function ($row) {
+                return Str::limit($row->personil->pluck('nama')->implode(', '), 50);
+            })
+            ->editColumn('lama_hari', function ($row) {
+                return $row->lama_hari . ' hari';
+            })
+            ->addColumn('tanggal_mulai_spt', function ($row) {
+                return $row->tanggal_mulai ? Carbon::parse($row->tanggal_mulai)->translatedFormat('d M Y') : '-';
+            })
+            ->addColumn('tanggal_selesai_spt', function ($row) {
+                return $row->tanggal_selesai ? Carbon::parse($row->tanggal_selesai)->translatedFormat('d M Y') : '-';
+            })
+            // Anda bisa menambahkan kolom aksi jika diperlukan (misal, link ke detail atau download)
+            // ->addColumn('action', function($row){
+            //      $btn = '<a href="javascript:void(0)" class="edit btn btn-primary btn-sm">View</a>';
+            //      return $btn;
+            // })
+            // ->rawColumns(['action'])
+            ->make(true);
     }
 }

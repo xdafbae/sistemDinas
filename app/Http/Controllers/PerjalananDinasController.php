@@ -1,6 +1,8 @@
 <?php
 
-namespace App\Http\Controllers; // Sesuaikan namespace Anda
+
+
+namespace App\Http\Controllers; // Sesuaikan jika controller Anda di subfolder (misal: App\Http\Controllers\Operator)
 
 use App\Models\PerjalananDinas;
 use App\Models\User;
@@ -20,8 +22,9 @@ class PerjalananDinasController extends Controller
 {
     public function __construct()
     {
-        // Middleware diatur di route, misalnya:
-        // Route::prefix('operator/perjalanan-dinas')...->middleware(['auth', 'role:operator']);
+        // Middleware sebaiknya diatur di file route, contoh:
+        // Route::prefix('operator/perjalanan-dinas')...->middleware(['auth', 'role:operator|superadmin']);
+        // Jika superadmin juga bisa melakukan aksi operator, tambahkan 'superadmin' di role middleware pada route.
     }
 
     /**
@@ -33,6 +36,7 @@ class PerjalananDinasController extends Controller
             $user = Auth::user();
             $query = PerjalananDinas::with(['operator', 'personil'])->latest();
 
+            // Operator hanya melihat pengajuan yang mereka buat, kecuali Super Admin
             if (!$user->hasRole('superadmin')) {
                 $query->where('operator_id', $user->id);
             }
@@ -40,12 +44,12 @@ class PerjalananDinasController extends Controller
             return DataTables::eloquent($query)
                 ->addIndexColumn()
                 ->addColumn('personil_list', fn($pd) => Str::limit($pd->personil->pluck('nama')->implode(', '), 50))
-                ->addColumn('tanggal_spt_formatted', fn($pd) => Carbon::parse($pd->tanggal_spt)->translatedFormat('d M Y'))
+                ->addColumn('tanggal_spt_formatted', fn($pd) => $pd->tanggal_spt ? Carbon::parse($pd->tanggal_spt)->translatedFormat('d M Y') : 'Belum Ditetapkan')
                 ->addColumn('tanggal_pelaksanaan', fn($pd) => Carbon::parse($pd->tanggal_mulai)->translatedFormat('d M Y') . ' s/d ' . Carbon::parse($pd->tanggal_selesai)->translatedFormat('d M Y'))
                 ->editColumn('status', function ($perjalanan) {
                     $statusText = str_replace('_', ' ', $perjalanan->status);
                     $statusText = ucwords($statusText);
-                    $badgeClass = 'bg-gradient-secondary';
+                    $badgeClass = 'bg-gradient-secondary'; // Default
                     if ($perjalanan->status === 'disetujui' || $perjalanan->status === 'selesai') $badgeClass = 'bg-gradient-success';
                     if (Str::contains($perjalanan->status, 'revisi')) $badgeClass = 'bg-gradient-warning';
                     if (Str::contains($perjalanan->status, 'tolak')) $badgeClass = 'bg-gradient-danger';
@@ -54,8 +58,8 @@ class PerjalananDinasController extends Controller
                 })
                 ->editColumn('total_estimasi_biaya', fn($pd) => 'Rp ' . number_format($pd->total_estimasi_biaya, 0, ',', '.'))
                 ->addColumn('action', function ($perjalanan) {
-                    $viewUrl = route('operator.perjalanan-dinas.show', $perjalanan->id); // Asumsi ada route show
-                    $editUrl = route('operator.perjalanan-dinas.edit', $perjalanan->id); // Asumsi ada route edit
+                    $viewUrl = route('operator.perjalanan-dinas.show', $perjalanan->id);
+                    $editUrl = route('operator.perjalanan-dinas.edit', $perjalanan->id);
                     $deleteBtn = '';
                     $editBtn = '';
 
@@ -67,7 +71,9 @@ class PerjalananDinasController extends Controller
                             <button type="submit" class="btn btn-sm btn-danger" data-bs-toggle="tooltip" title="Hapus"><i class="fas fa-trash"></i></button>
                         </form>';
                     }
-                    return '<div class="btn-group">' . $editBtn . '<a href="' . $viewUrl . '" class="btn btn-sm btn-info me-1" data-bs-toggle="tooltip" title="Lihat"><i class="fas fa-eye"></i></a>' . $deleteBtn . '</div>';
+                    // Tombol Lihat selalu ada
+                    $viewBtn = '<a href="' . $viewUrl . '" class="btn btn-sm btn-info me-1" data-bs-toggle="tooltip" title="Lihat"><i class="fas fa-eye"></i></a>';
+                    return '<div class="btn-group">' . $editBtn . $viewBtn . $deleteBtn . '</div>';
                 })
                 ->rawColumns(['action', 'status'])
                 ->make(true);
@@ -80,7 +86,7 @@ class PerjalananDinasController extends Controller
      */
     public function create()
     {
-        $users = User::where('aktif', true)->orderBy('nama')->get(); // Asumsi ada kolom 'aktif'
+        $users = User::where('aktif', true)->orderBy('nama')->get();
         $provinsis = SbuItem::distinct()
                         ->whereNotNull('provinsi_tujuan')
                         ->where('provinsi_tujuan', '!=', '')
@@ -95,11 +101,11 @@ class PerjalananDinasController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'tanggal_spt' => 'required|date',
+            'tanggal_spt' => 'required|date|before_or_equal:tanggal_mulai',
             'jenis_spt' => 'required|in:dalam_daerah,luar_daerah_dalam_provinsi,luar_daerah_luar_provinsi',
             'jenis_kegiatan' => 'required|string|max:100',
             'tujuan_spt' => 'required|string|max:255',
-            'provinsi_tujuan_id' => 'required_if:jenis_spt,luar_daerah_dalam_provinsi,luar_daerah_luar_provinsi|nullable|string|max:255',
+            'provinsi_tujuan_id' => 'required_if:jenis_spt,luar_daerah_luar_provinsi|nullable|string|max:255', // Hanya wajib jika luar provinsi
             'kota_tujuan_id' => 'nullable|string|max:255',
             'kecamatan_tujuan_id' => 'nullable|string|max:255',
             'desa_tujuan_id' => 'nullable|string|max:255',
@@ -108,7 +114,7 @@ class PerjalananDinasController extends Controller
             'uraian_spt' => 'required|string',
             'opsi_transportasi_udara' => 'nullable|in:ya',
             'opsi_transportasi_darat_antar_kota' => 'nullable|in:ya',
-            'jumlah_taksi_di_tujuan' => 'nullable|integer|min:0|max:10', // Max taksi bisa disesuaikan
+            'jumlah_taksi_di_tujuan' => 'nullable|integer|min:0|max:10',
             'alat_angkut_lainnya' => 'nullable|string|max:255',
             'personil_ids' => 'required|array|min:1',
             'personil_ids.*' => 'exists:users,id',
@@ -139,23 +145,24 @@ class PerjalananDinasController extends Controller
                 }
             }
 
-            $tahun = date('Y');
-            $bulanRomawi = $this->getRomanMonth(date('n'));
-            $nomorUrut = PerjalananDinas::whereYear('created_at', $tahun)->count() + 1;
-            $kodeKlasifikasi = config('constants.spt.kode_klasifikasi', "090");
-            $nomorSpt = sprintf("%s/%03d/SPT-PD/%s/%s", $kodeKlasifikasi, $nomorUrut, $bulanRomawi, $tahun);
-
-            $provinsiTujuan = ($request->jenis_spt == 'dalam_daerah' || $request->jenis_spt == 'luar_daerah_dalam_provinsi') ? 'RIAU' : $request->provinsi_tujuan_id;
+            // Tentukan provinsi_tujuan_id di backend
+            $provinsiTujuanUntukSimpan = $request->provinsi_tujuan_id;
+            if ($request->jenis_spt == 'dalam_daerah' || $request->jenis_spt == 'luar_daerah_dalam_provinsi') {
+                $provinsiTujuanUntukSimpan = 'RIAU';
+            }
 
             $perjalanan = PerjalananDinas::create([
-                'nomor_spt' => $nomorSpt,
+                'nomor_spt' => null, // Akan diisi oleh Atasan
                 'tanggal_spt' => $request->tanggal_spt,
                 'jenis_spt' => $request->jenis_spt,
                 'jenis_kegiatan' => $request->jenis_kegiatan,
                 'tujuan_spt' => $request->tujuan_spt,
-                'provinsi_tujuan_id' => $provinsiTujuan,
-                'kota_tujuan_id' => $request->kota_tujuan_id,
-                // Anda mungkin perlu menyimpan kecamatan_tujuan_id, desa_tujuan_id, jarak_km jika itu permanen
+                'provinsi_tujuan_id' => $provinsiTujuanUntukSimpan,
+                'kota_tujuan_id' => ($request->jenis_spt == 'dalam_daerah' && strtoupper($provinsiTujuanUntukSimpan) == 'RIAU') ? 'SIAK' : $request->kota_tujuan_id,
+                // Simpan kecamatan, desa, jarak jika Anda menambahkannya ke model PerjalananDinas
+                // 'kecamatan_tujuan_id' => $request->kecamatan_tujuan_id,
+                // 'desa_tujuan_id' => $request->desa_tujuan_id,
+                // 'jarak_km' => $request->jarak_km,
                 'dasar_spt' => $request->dasar_spt,
                 'uraian_spt' => $request->uraian_spt,
                 'alat_angkut' => $alatAngkutFinal,
@@ -169,6 +176,7 @@ class PerjalananDinasController extends Controller
 
             $perjalanan->personil()->attach($request->personil_ids);
 
+            // --- Kalkulasi Estimasi Biaya Otomatis ---
             $totalEstimasiKeseluruhan = 0;
             $detailBiayaUntukSimpan = [];
             $personilsBerangkat = User::whereIn('id', $request->personil_ids)->get();
@@ -176,79 +184,87 @@ class PerjalananDinasController extends Controller
             foreach ($personilsBerangkat as $personil) {
                 $tingkatSbuPersonil = $this->getSbuTingkatUntukPersonil($personil);
                 $isDiklat = strtolower($request->jenis_kegiatan) == 'diklat';
-                $logPrefix = "Kalkulasi Biaya Perjadin ID (tmp) {$perjalanan->id}, Personil ID {$personil->id}, Tingkat SBU {$tingkatSbuPersonil}: ";
+                $logPrefix = "Kalkulasi Biaya Perjadin (ID sementara {$perjalanan->id}), Personil ID {$personil->id}, Tingkat SBU {$tingkatSbuPersonil}: ";
 
                 // 1. UANG HARIAN
-                $sbuUHQuery = SbuItem::where('kategori_biaya', 'UANG_HARIAN')->where('provinsi_tujuan', $provinsiTujuan);
-                if ($isDiklat) { $sbuUHQuery->where('uraian_biaya', 'like', '%Diklat%'); }
-                else { $sbuUHQuery->where('uraian_biaya', 'not like', '%Diklat%'); }
-                if ($request->jenis_spt == 'dalam_daerah') { $sbuUHQuery->where('tipe_perjalanan', 'DALAM_KABUPATEN_LEBIH_8_JAM'); }
-                else { $sbuUHQuery->where('tipe_perjalanan', 'LUAR_DAERAH_LUAR_KABUPATEN'); }
+                $sbuUHQuery = SbuItem::where('kategori_biaya', 'UANG_HARIAN')->where('provinsi_tujuan', $provinsiTujuanUntukSimpan);
+                if ($isDiklat) { $sbuUHQuery->where('uraian_biaya', 'like', '%Diklat%'); } else { $sbuUHQuery->where('uraian_biaya', 'not like', '%Diklat%'); }
+                if ($request->jenis_spt == 'dalam_daerah') { $sbuUHQuery->where('tipe_perjalanan', 'DALAM_KABUPATEN_LEBIH_8_JAM'); } else { $sbuUHQuery->where('tipe_perjalanan', 'LUAR_DAERAH_LUAR_KABUPATEN'); }
                 $sbuUangHarian = $sbuUHQuery->where(fn($q) => $q->where('tingkat_pejabat_atau_golongan', $tingkatSbuPersonil)->orWhere('tingkat_pejabat_atau_golongan', 'Semua'))
                                       ->orderByRaw("CASE WHEN tingkat_pejabat_atau_golongan = ? THEN 0 ELSE 1 END", [$tingkatSbuPersonil])->first();
                 if ($sbuUangHarian) {
                     $subtotal = $sbuUangHarian->besaran_biaya * $lama_hari;
-                    $detailBiayaUntukSimpan[] = new PerjalananDinasBiaya(['sbu_item_id' => $sbuUangHarian->id, 'user_id_terkait' => $personil->id, 'deskripsi_biaya' => $sbuUangHarian->uraian_biaya . ($isDiklat ? " (Diklat)" : ""), 'jumlah_personil_terkait' => 1, 'jumlah_hari_terkait' => $lama_hari, 'jumlah_unit' => $lama_hari, 'harga_satuan' => $sbuUangHarian->besaran_biaya, 'subtotal_biaya' => $subtotal,]);
+                    $detailBiayaUntukSimpan[] = new PerjalananDinasBiaya([
+                        'sbu_item_id' => $sbuUangHarian->id, 'user_id_terkait' => $personil->id,
+                        'deskripsi_biaya' => $sbuUangHarian->uraian_biaya . ($isDiklat ? " (Diklat)" : ""),
+                        'jumlah_personil_terkait' => 1, 'jumlah_hari_terkait' => $lama_hari,
+                        'jumlah_unit' => $lama_hari, 'harga_satuan' => $sbuUangHarian->besaran_biaya, 'subtotal_biaya' => $subtotal,
+                    ]);
                     $totalEstimasiKeseluruhan += $subtotal;
-                } else { Log::warning($logPrefix . "SBU Uang Harian tidak ditemukan. Provinsi: {$provinsiTujuan}, Kegiatan: {$request->jenis_kegiatan}."); }
+                } else { Log::warning($logPrefix . "SBU Uang Harian tidak ditemukan. Prov: {$provinsiTujuanUntukSimpan}, Keg: {$request->jenis_kegiatan}, Diklat: " . ($isDiklat ? 'Ya':'Tidak'));}
 
                 // 2. BIAYA PENGINAPAN
                 $jumlahMalamInap = max(0, $lama_hari - 1);
                 if ($jumlahMalamInap > 0 && !$isDiklat) {
-                    $sbuPenginapanQuery = SbuItem::where('kategori_biaya', 'PENGINAPAN')->where('provinsi_tujuan', $provinsiTujuan);
-                    if($request->jenis_spt == 'dalam_daerah' && strtoupper($provinsiTujuan) == 'RIAU'){ $sbuPenginapanQuery->where('kota_tujuan', 'SIAK')->where('tipe_perjalanan', 'DALAM_KABUPATEN_LEBIH_8_JAM'); }
+                    $sbuPenginapanQuery = SbuItem::where('kategori_biaya', 'PENGINAPAN')->where('provinsi_tujuan', $provinsiTujuanUntukSimpan);
+                    if($request->jenis_spt == 'dalam_daerah' && strtoupper($provinsiTujuanUntukSimpan) == 'RIAU'){ $sbuPenginapanQuery->where('kota_tujuan', 'SIAK')->where('tipe_perjalanan', 'DALAM_KABUPATEN_LEBIH_8_JAM'); }
                     else if ($request->jenis_spt != 'dalam_daerah'){ $sbuPenginapanQuery->where('tipe_perjalanan', 'LUAR_DAERAH_LUAR_KABUPATEN'); }
-                    else { $sbuPenginapanQuery->whereRaw('1=0'); /* Force no result jika jenis_spt tidak cocok */ }
+                    else { $sbuPenginapanQuery->whereRaw('1=0'); } // Kondisi agar tidak ada hasil jika jenis_spt tidak sesuai
 
                     $sbuPenginapan = $sbuPenginapanQuery->where(fn($q) => $q->where('tingkat_pejabat_atau_golongan', $tingkatSbuPersonil)->orWhere('tingkat_pejabat_atau_golongan', 'Semua'))
                                            ->orderByRaw("CASE WHEN tingkat_pejabat_atau_golongan = ? THEN 0 ELSE 1 END", [$tingkatSbuPersonil])->first();
                     if ($sbuPenginapan) {
                         $subtotal = $sbuPenginapan->besaran_biaya * $jumlahMalamInap;
-                        $detailBiayaUntukSimpan[] = new PerjalananDinasBiaya(['sbu_item_id' => $sbuPenginapan->id, 'user_id_terkait' => $personil->id, 'deskripsi_biaya' => $sbuPenginapan->uraian_biaya, 'jumlah_personil_terkait' => 1, 'jumlah_hari_terkait' => $jumlahMalamInap, 'jumlah_unit' => $jumlahMalamInap, 'harga_satuan' => $sbuPenginapan->besaran_biaya, 'subtotal_biaya' => $subtotal,]);
+                        $detailBiayaUntukSimpan[] = new PerjalananDinasBiaya([
+                            'sbu_item_id' => $sbuPenginapan->id, 'user_id_terkait' => $personil->id,
+                            'deskripsi_biaya' => $sbuPenginapan->uraian_biaya,
+                            'jumlah_personil_terkait' => 1, 'jumlah_hari_terkait' => $jumlahMalamInap,
+                            'jumlah_unit' => $jumlahMalamInap, 'harga_satuan' => $sbuPenginapan->besaran_biaya, 'subtotal_biaya' => $subtotal,
+                        ]);
                         $totalEstimasiKeseluruhan += $subtotal;
-                    } else { Log::warning($logPrefix . "SBU Penginapan tidak ditemukan. Provinsi: {$provinsiTujuan}."); }
+                    } else { Log::warning($logPrefix . "SBU Penginapan tidak ditemukan. Prov: {$provinsiTujuanUntukSimpan}."); }
                 }
 
-                // 3. BIAYA TRANSPORTASI UDARA
+                // 3. BIAYA TRANSPORTASI UDARA (PESAWAT)
                 if ($request->jenis_spt == 'luar_daerah_luar_provinsi' && $request->filled('opsi_transportasi_udara') && $request->opsi_transportasi_udara == 'ya') {
-                    $sbuPesawat = SbuItem::where('kategori_biaya', 'TRANSPORTASI_UDARA')->where('provinsi_tujuan', $provinsiTujuan)->where('tingkat_pejabat_atau_golongan', 'EKONOMI') /* Asumsi default Ekonomi */ ->first();
+                    $sbuPesawat = SbuItem::where('kategori_biaya', 'TRANSPORTASI_UDARA')->where('provinsi_tujuan', $provinsiTujuanUntukSimpan)->where('tingkat_pejabat_atau_golongan', 'EKONOMI')->first();
                     if($sbuPesawat){ $subtotal = $sbuPesawat->besaran_biaya; $detailBiayaUntukSimpan[] = new PerjalananDinasBiaya(['sbu_item_id' => $sbuPesawat->id, 'user_id_terkait' => $personil->id, 'deskripsi_biaya' => $sbuPesawat->uraian_biaya, 'jumlah_personil_terkait' => 1, 'jumlah_hari_terkait' => 0, 'jumlah_unit' => 1, 'harga_satuan' => $sbuPesawat->besaran_biaya, 'subtotal_biaya' => $subtotal,]); $totalEstimasiKeseluruhan += $subtotal; }
-                    else { Log::warning($logPrefix . "SBU Pesawat tidak ditemukan. Provinsi Tujuan: {$provinsiTujuan}."); }
+                    else { Log::warning($logPrefix . "SBU Pesawat tidak ditemukan. Prov Tujuan: {$provinsiTujuanUntukSimpan}."); }
                 }
 
                 // 4. BIAYA TRANSPORTASI DARAT (TAKSI) DI KOTA TUJUAN
                 $jumlahTaksi = intval($request->input('jumlah_taksi_di_tujuan', 0));
                 if ($jumlahTaksi > 0 && ($request->jenis_spt == 'luar_daerah_dalam_provinsi' || $request->jenis_spt == 'luar_daerah_luar_provinsi')) {
-                    $sbuTaksi = SbuItem::where('kategori_biaya', 'TRANSPORTASI_DARAT_TAKSI')->where('provinsi_tujuan', $provinsiTujuan)->first();
+                    $sbuTaksi = SbuItem::where('kategori_biaya', 'TRANSPORTASI_DARAT_TAKSI')->where('provinsi_tujuan', $provinsiTujuanUntukSimpan)->first();
                     if ($sbuTaksi) { $subtotal = $sbuTaksi->besaran_biaya * $jumlahTaksi; $detailBiayaUntukSimpan[] = new PerjalananDinasBiaya(['sbu_item_id' => $sbuTaksi->id, 'user_id_terkait' => $personil->id, 'deskripsi_biaya' => $sbuTaksi->uraian_biaya . " ({$jumlahTaksi} kali)", 'jumlah_personil_terkait' => 1, 'jumlah_hari_terkait' => 0, 'jumlah_unit' => $jumlahTaksi, 'harga_satuan' => $sbuTaksi->besaran_biaya, 'subtotal_biaya' => $subtotal,]); $totalEstimasiKeseluruhan += $subtotal; }
-                    else { Log::warning($logPrefix . "SBU Taksi tidak ditemukan. Provinsi Tujuan: {$provinsiTujuan}."); }
+                    else { Log::warning($logPrefix . "SBU Taksi tidak ditemukan. Prov Tujuan: {$provinsiTujuanUntukSimpan}."); }
                 }
 
                 // 5. UANG REPRESENTASI
                 if (!$isDiklat) {
-                    $tipePerjalananRep = ($request->jenis_spt == 'dalam_daerah') ? 'DALAM_KABUPATEN_LEBIH_8_JAM' : (($request->jenis_spt == 'luar_daerah_dalam_provinsi' || $request->jenis_spt == 'luar_daerah_luar_provinsi') ? 'LUAR_DAERAH_LUAR_KABUPATEN' : null);
+                    $tipePerjalananRep = ($request->jenis_spt == 'dalam_daerah') ? 'DALAM_KABUPATEN_LEBIH_8_JAM' : (($request->jenis_spt != 'dalam_daerah') ? 'LUAR_DAERAH_LUAR_KABUPATEN' : null);
                     if ($tipePerjalananRep) {
                         $sbuRepresentasi = SbuItem::where('kategori_biaya', 'REPRESENTASI')->where('tipe_perjalanan', $tipePerjalananRep)->where('tingkat_pejabat_atau_golongan', $tingkatSbuPersonil)->first();
-                        if ($sbuRepresentasi) { $subtotal = $sbuRepresentasi->besaran_biaya * $lama_hari; $detailBiayaUntukSimpan[] = new PerjalananDinasBiaya([/* ... */ 'subtotal_biaya' => $subtotal]); $totalEstimasiKeseluruhan += $subtotal; }
+                        if ($sbuRepresentasi) { $subtotal = $sbuRepresentasi->besaran_biaya * $lama_hari; $detailBiayaUntukSimpan[] = new PerjalananDinasBiaya(['sbu_item_id' => $sbuRepresentasi->id, 'user_id_terkait' => $personil->id, 'deskripsi_biaya' => $sbuRepresentasi->uraian_biaya, 'jumlah_personil_terkait' => 1, 'jumlah_hari_terkait' => $lama_hari, 'jumlah_unit' => $lama_hari, 'harga_satuan' => $sbuRepresentasi->besaran_biaya, 'subtotal_biaya' => $subtotal,]); $totalEstimasiKeseluruhan += $subtotal; }
                     }
                 }
 
                 // 6. TRANSPORTASI ANTAR KABUPATEN DALAM PROVINSI (DARI SIAK)
-                if ($request->jenis_spt == 'luar_daerah_dalam_provinsi' && strtoupper($provinsiTujuan) == 'RIAU' && $request->filled('kota_tujuan_id') && strtoupper($request->kota_tujuan_id) != 'SIAK' && $request->filled('opsi_transportasi_darat_antar_kota') && $request->opsi_transportasi_darat_antar_kota == 'ya' && !($request->filled('opsi_transportasi_udara') && $request->opsi_transportasi_udara == 'ya')) {
+                if ($request->jenis_spt == 'luar_daerah_dalam_provinsi' && strtoupper($provinsiTujuanUntukSimpan) == 'RIAU' && $request->filled('kota_tujuan_id') && strtoupper($request->kota_tujuan_id) != 'SIAK' && $request->filled('opsi_transportasi_darat_antar_kota') && $request->opsi_transportasi_darat_antar_kota == 'ya' && !($request->filled('opsi_transportasi_udara') && $request->opsi_transportasi_udara == 'ya')) {
                     $sbuAntarKab = SbuItem::where('kategori_biaya', 'TRANSPORTASI_ANTAR_KABUPATEN_PROVINSI')->where('provinsi_tujuan', 'RIAU')->where('kota_tujuan', strtoupper($request->kota_tujuan_id))->first();
-                    if($sbuAntarKab){ $subtotal = $sbuAntarKab->besaran_biaya; $detailBiayaUntukSimpan[] = new PerjalananDinasBiaya([/* ... */ 'subtotal_biaya' => $subtotal]); $totalEstimasiKeseluruhan += $subtotal; }
+                    if($sbuAntarKab){ $subtotal = $sbuAntarKab->besaran_biaya; $detailBiayaUntukSimpan[] = new PerjalananDinasBiaya(['sbu_item_id' => $sbuAntarKab->id, 'user_id_terkait' => $personil->id, 'deskripsi_biaya' => $sbuAntarKab->uraian_biaya, 'jumlah_personil_terkait' => 1, 'jumlah_hari_terkait' => 0, 'jumlah_unit' => 1, 'harga_satuan' => $sbuAntarKab->besaran_biaya, 'subtotal_biaya' => $subtotal,]); $totalEstimasiKeseluruhan += $subtotal; }
                     else { Log::warning($logPrefix . "SBU Trans Antar Kab tidak ditemukan. Kota Tujuan Riau: {$request->kota_tujuan_id}."); }
                 }
 
                 // 7. TRANSPORTASI KECAMATAN/DESA (DALAM KABUPATEN SIAK)
-                if ($request->jenis_spt == 'dalam_daerah' && strtoupper($provinsiTujuan) == 'RIAU' && ($request->filled('kecamatan_tujuan_id') || $request->filled('jarak_km')) && !($request->filled('opsi_transportasi_udara') && $request->opsi_transportasi_udara == 'ya')) {
+                if ($request->jenis_spt == 'dalam_daerah' && strtoupper($provinsiTujuanUntukSimpan) == 'RIAU' && ($request->filled('kecamatan_tujuan_id') || $request->filled('jarak_km')) && !($request->filled('opsi_transportasi_udara') && $request->opsi_transportasi_udara == 'ya') && !($request->filled('opsi_transportasi_darat_antar_kota') && $request->opsi_transportasi_darat_antar_kota == 'ya')) {
                     $sbuTransInternalQuery = SbuItem::where('kategori_biaya', 'TRANSPORTASI_KECAMATAN_DESA')->where('provinsi_tujuan', 'RIAU')->where('kota_tujuan', 'SIAK');
                     if ($request->filled('kecamatan_tujuan_id') && $request->filled('desa_tujuan_id')) { $sbuTransInternalQuery->where('kecamatan_tujuan', $request->kecamatan_tujuan_id)->where('desa_tujuan', $request->desa_tujuan_id); }
-                    elseif ($request->filled('kecamatan_tujuan_id')) { $sbuTransInternalQuery->where('kecamatan_tujuan', $request->kecamatan_tujuan_id)->whereNull('desa_tujuan'); }
+                    elseif ($request->filled('kecamatan_tujuan_id')) { $sbuTransInternalQuery->where('kecamatan_tujuan', $request->kecamatan_tujuan_id)->where(fn($q) => $q->whereNull('desa_tujuan')->orWhere('desa_tujuan','')); }
                     elseif ($request->filled('jarak_km')) { $jarak = intval($request->jarak_km); $sbuTransInternalQuery->where('jarak_km_min', '<=', $jarak)->where('jarak_km_max', '>=', $jarak); }
-                    else { $sbuTransInternalQuery->whereRaw('1=0'); } // Force no result
+                    else { $sbuTransInternalQuery->whereRaw('1=0'); }
                     $sbuTransportInternal = $sbuTransInternalQuery->first();
-                    if($sbuTransportInternal){ $subtotal = $sbuTransportInternal->besaran_biaya; $detailBiayaUntukSimpan[] = new PerjalananDinasBiaya([/* ... */ 'subtotal_biaya' => $subtotal]); $totalEstimasiKeseluruhan += $subtotal; }
+                    if($sbuTransportInternal){ $subtotal = $sbuTransportInternal->besaran_biaya; $detailBiayaUntukSimpan[] = new PerjalananDinasBiaya(['sbu_item_id' => $sbuTransportInternal->id, 'user_id_terkait' => $personil->id, 'deskripsi_biaya' => $sbuTransportInternal->uraian_biaya, 'jumlah_personil_terkait' => 1, 'jumlah_hari_terkait' => 0, 'jumlah_unit' => 1, 'harga_satuan' => $sbuTransportInternal->besaran_biaya, 'subtotal_biaya' => $subtotal,]); $totalEstimasiKeseluruhan += $subtotal; }
                     else { Log::warning($logPrefix . "SBU Trans Internal Siak tidak ditemukan. Kec: {$request->kecamatan_tujuan_id}, Desa: {$request->desa_tujuan_id}, Jarak: {$request->jarak_km}."); }
                 }
 
@@ -261,7 +277,7 @@ class PerjalananDinasController extends Controller
             $perjalanan->save();
 
             DB::commit();
-            return redirect()->route('operator.perjalanan-dinas.index')->with('success', 'Pengajuan perjalanan dinas berhasil dibuat dengan Nomor SPT: ' . $nomorSpt . '. Estimasi Biaya: Rp ' . number_format($totalEstimasiKeseluruhan,0,',','.'));
+            return redirect()->route('operator.perjalanan-dinas.index')->with('success', 'Pengajuan perjalanan dinas berhasil dibuat. Estimasi Biaya: Rp ' . number_format($totalEstimasiKeseluruhan,0,',','.'));
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error("Error saat menyimpan perjalanan dinas: " . $e->getMessage() . "\nTrace: " . $e->getTraceAsString());
@@ -282,39 +298,79 @@ class PerjalananDinasController extends Controller
     /**
      * Show the form for editing the specified resource.
      */
-    public function edit(PerjalananDinas $perjalananDinas)
-    {
-        // $this->authorize('update', $perjalananDinas); // Implement Policy
-        if (!in_array($perjalananDinas->status, ['draft', 'revisi_operator_verifikator', 'revisi_operator_atasan'])) {
-            return redirect()->route('operator.perjalanan-dinas.index')->with('error', 'Pengajuan ini tidak dapat diedit lagi.');
-        }
+    // app/Http/Controllers/PerjalananDinasController.php
 
-        $users = User::where('aktif', true)->orderBy('nama')->get();
-        $provinsis = SbuItem::distinct()->whereNotNull('provinsi_tujuan')->where('provinsi_tujuan', '!=', '')->orderBy('provinsi_tujuan')->pluck('provinsi_tujuan', 'provinsi_tujuan');
-        $selectedPersonilIds = $perjalananDinas->personil->pluck('id')->toArray();
+public function edit(PerjalananDinas $perjalananDinas) // Laravel akan otomatis inject $perjalananDinas berdasarkan ID di URL
+{
+    // Implementasi otorisasi (misalnya menggunakan Policy)
+    // $this->authorize('update', $perjalananDinas);
 
-        $opsiUdaraTerpilih = Str::contains(strtolower($perjalananDinas->alat_angkut ?? ''), 'pesawat');
-        $alatAngkutLainnya = $perjalananDinas->alat_angkut;
-        if ($opsiUdaraTerpilih) {
-            $parts = explode('/', $perjalananDinas->alat_angkut);
-            $nonPesawatParts = array_filter($parts, function($part) {
-                return !Str::contains(strtolower(trim($part)), 'pesawat');
-            });
-            $alatAngkutLainnya = !empty($nonPesawatParts) ? trim(implode(' / ', $nonPesawatParts)) : 'Kendaraan Dinas/Umum';
-            if (empty(trim($alatAngkutLainnya))) $alatAngkutLainnya = 'Kendaraan Dinas/Umum';
-        }
-
-        // Ambil data yang mungkin sudah diinput sebelumnya jika ada kolomnya di perjalanan_dinas
-        $jumlahTaksiDiTujuan = $perjalananDinas->jumlah_taksi_di_tujuan ?? 0; // Asumsi ada kolom ini
-        $opsiTransportasiDaratAntarKota = $perjalananDinas->opsi_transportasi_darat_antar_kota ?? 'tidak'; // Asumsi ada kolom ini
-        // Data untuk transportasi internal Siak
-        $kecamatanTujuanId = $request->old('kecamatan_tujuan_id', $perjalananDinas->kecamatan_tujuan_id ?? '');
-        $desaTujuanId = $request->old('desa_tujuan_id', $perjalananDinas->desa_tujuan_id ?? '');
-        $jarakKm = $request->old('jarak_km', $perjalananDinas->jarak_km ?? '');
-
-
-        return view('perjalanan_dinas.operator.edit', compact('perjalananDinas', 'users', 'provinsis', 'selectedPersonilIds', 'opsiUdaraTerpilih', 'alatAngkutLainnya', 'jumlahTaksiDiTujuan', 'opsiTransportasiDaratAntarKota', 'kecamatanTujuanId', 'desaTujuanId', 'jarakKm'));
+    if (!in_array($perjalananDinas->status, ['draft', 'revisi_operator_verifikator', 'revisi_operator_atasan'])) {
+        return redirect()->route('operator.perjalanan-dinas.index')->with('error', 'Pengajuan ini tidak dapat diedit lagi.');
     }
+
+    $users = User::where('aktif', true)->orderBy('nama')->get();
+    $provinsis = SbuItem::distinct()
+                    ->whereNotNull('provinsi_tujuan')
+                    ->where('provinsi_tujuan', '!=', '')
+                    ->orderBy('provinsi_tujuan')
+                    ->pluck('provinsi_tujuan', 'provinsi_tujuan');
+    $selectedPersonilIds = $perjalananDinas->personil->pluck('id')->toArray();
+
+    // Menentukan nilai awal untuk field transportasi dari data $perjalananDinas
+    $opsiUdaraTerpilih = Str::contains(strtolower($perjalananDinas->alat_angkut ?? ''), 'pesawat');
+    $opsiTransportasiDaratAntarKotaTerpilih = Str::contains(strtolower($perjalananDinas->alat_angkut ?? ''), 'antar kota');
+
+    $alatAngkutLainnya = $perjalananDinas->alat_angkut;
+    if ($opsiUdaraTerpilih) {
+        // Jika "Pesawat Udara / Kendaraan Lain", ambil "Kendaraan Lain"
+        // Jika hanya "Pesawat Udara", set default untuk input teks
+        $parts = explode('/', $perjalananDinas->alat_angkut);
+        $nonPesawatParts = array_filter($parts, function($part) {
+            return !Str::contains(strtolower(trim($part)), 'pesawat');
+        });
+        $alatAngkutLainnya = !empty($nonPesawatParts) ? trim(implode(' / ', $nonPesawatParts)) : 'Kendaraan Dinas/Umum';
+        if (empty(trim($alatAngkutLainnya)) && count($parts) === 1 && Str::contains(strtolower(trim($parts[0])), 'pesawat')) {
+             $alatAngkutLainnya = 'Kendaraan Dinas/Umum'; // Jika hanya Pesawat Udara
+        }
+    } elseif ($opsiTransportasiDaratAntarKotaTerpilih) {
+        // Logika serupa jika perlu memisahkan dari "Kendaraan Umum Antar Kota / ..."
+         $parts = explode('/', $perjalananDinas->alat_angkut);
+        $nonAntarKotaParts = array_filter($parts, function($part) {
+            return !Str::contains(strtolower(trim($part)), 'antar kota');
+        });
+        $alatAngkutLainnya = !empty($nonAntarKotaParts) ? trim(implode(' / ', $nonAntarKotaParts)) : 'Kendaraan Dinas/Umum';
+         if (empty(trim($alatAngkutLainnya)) && count($parts) === 1 && Str::contains(strtolower(trim($parts[0])), 'antar kota')) {
+             $alatAngkutLainnya = 'Kendaraan Dinas/Umum';
+        }
+    }
+
+
+    // Ambil data yang mungkin sudah diinput sebelumnya jika ada kolomnya di perjalanan_dinas
+    // Jika kolom ini tidak ada di tabel perjalanan_dinas, Anda tidak bisa mengambilnya dari $perjalananDinas->nama_kolom
+    // Anda harus mengambilnya dari $request->old('nama_kolom') saja di view.
+    $jumlahTaksiDiTujuan = old('jumlah_taksi_di_tujuan', $perjalananDinas->jumlah_taksi_di_tujuan ?? 0); // Asumsi ada kolom 'jumlah_taksi_di_tujuan' di model
+    $kecamatanTujuanId = old('kecamatan_tujuan_id', $perjalananDinas->kecamatan_tujuan_id ?? ''); // Asumsi ada kolom
+    $desaTujuanId = old('desa_tujuan_id', $perjalananDinas->desa_tujuan_id ?? '');           // Asumsi ada kolom
+    $jarakKm = old('jarak_km', $perjalananDinas->jarak_km ?? '');                           // Asumsi ada kolom
+
+    return view('perjalanan_dinas.operator.edit', compact(
+        'perjalananDinas',
+        'users',
+        'provinsis',
+        'selectedPersonilIds',
+        'opsiUdaraTerpilih',
+        'opsiTransportasiDaratAntarKotaTerpilih', // Kirim ini juga
+        'alatAngkutLainnya',
+        'jumlahTaksiDiTujuan',
+        'kecamatanTujuanId',
+        'desaTujuanId',
+        'jarakKm'
+    ));
+}
+    
+
+    
 
     /**
      * Update the specified resource in storage.

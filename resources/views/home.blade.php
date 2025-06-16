@@ -114,6 +114,145 @@
             </div>
         </div>
 
+        {{-- NEW ROW: User-Specific Perjalanan Dinas Card --}}
+        <div class="row mt-4">
+            <div class="col-lg-12 mb-lg-0 mb-4">
+                <div class="card">
+                    <div class="card-header pb-0 p-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">{{ $canViewAllData ? 'Perjalanan Dinas Per Personil' : 'Perjalanan Dinas Anda' }}</h6>
+                        </div>
+                    </div>
+                    <div class="card-body p-3">
+                        @if($canViewAllData)
+                            {{-- Admin View: Table of users with their perjalanan dinas count --}}
+                            @if(isset($userPerjalananDinas) && count($userPerjalananDinas) > 0)
+                                <div class="table-responsive">
+                                    <table class="table align-items-center mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Personil</th>
+                                                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">NIP</th>
+                                                <th class="text-center text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Total Perjalanan</th>
+                                                <th class="text-secondary opacity-7"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($userPerjalananDinas as $userData)
+                                                <tr>
+                                                    <td>
+                                                        <div class="d-flex px-2 py-1">
+                                                            <div>
+                                                                <div class="avatar avatar-sm me-3 bg-gradient-primary">
+                                                                    <span class="text-white">{{ substr($userData->nama, 0, 1) }}</span>
+                                                                </div>
+                                                            </div>
+                                                            <div class="d-flex flex-column justify-content-center">
+                                                                <h6 class="mb-0 text-sm">{{ $userData->nama }}</h6>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <p class="text-xs font-weight-bold mb-0">{{ $userData->nip ?? '-' }}</p>
+                                                    </td>
+                                                    <td class="align-middle text-center">
+                                                        <span class="badge badge-sm bg-gradient-success">{{ $userData->total_perjalanan }}</span>
+                                                    </td>
+                                                    <td class="align-middle text-end">
+                                                        <a href="#" class="text-secondary font-weight-bold text-xs" data-toggle="tooltip" data-original-title="Detail perjalanan">
+                                                            Detail
+                                                        </a>
+                                                    </td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            @else
+                                <div class="text-center py-4">
+                                    <p class="text-muted mb-0">Belum ada data perjalanan dinas untuk ditampilkan.</p>
+                                </div>
+                            @endif
+                        @else
+                            {{-- Regular User View: Personal Perjalanan Dinas Stats --}}
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="card card-stats mb-4 mb-xl-0">
+                                        <div class="card-body">
+                                            <div class="row">
+                                                <div class="col">
+                                                    <h5 class="card-title text-uppercase text-muted mb-0">Total Perjalanan</h5>
+                                                    <span class="h2 font-weight-bold mb-0">{{ $totalPerjalananUser ?? 0 }}</span>
+                                                </div>
+                                                <div class="col-auto">
+                                                    <div class="icon icon-shape bg-gradient-info text-white rounded-circle shadow">
+                                                        <i class="ni ni-chart-bar-32"></i>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <p class="mt-3 mb-0 text-muted text-sm">
+                                                <span class="text-nowrap">Sepanjang karir Anda</span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="card card-stats mb-4 mb-xl-0">
+                                        <div class="card-body">
+                                            <div class="row">
+                                                <div class="col">
+                                                    <h5 class="card-title text-uppercase text-muted mb-0">Status Perjalanan</h5>
+                                                </div>
+                                            </div>
+                                            <div class="progress-wrapper mt-3">
+                                                <div class="progress-info">
+                                                    <div class="progress-percentage">
+                                                        <span class="text-success">Disetujui: {{ $perjalananDisetujui ?? 0 }}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="progress">
+                                                    <div class="progress-bar bg-success" role="progressbar" 
+                                                        style="width: {{ isset($totalPerjalananUser) && $totalPerjalananUser > 0 ? (($perjalananDisetujui ?? 0) / $totalPerjalananUser * 100) : 0 }}%">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="progress-wrapper mt-3">
+                                                <div class="progress-info">
+                                                    <div class="progress-percentage">
+                                                        <span class="text-warning">Diproses: {{ $perjalananDiproses ?? 0 }}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="progress">
+                                                    <div class="progress-bar bg-warning" role="progressbar" 
+                                                        style="width: {{ isset($totalPerjalananUser) && $totalPerjalananUser > 0 ? (($perjalananDiproses ?? 0) / $totalPerjalananUser * 100) : 0 }}%">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="progress-wrapper mt-3">
+                                                <div class="progress-info">
+                                                    <div class="progress-percentage">
+                                                        <span class="text-danger">Ditolak: {{ $perjalananDitolak ?? 0 }}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="progress">
+                                                    <div class="progress-bar bg-danger" role="progressbar" 
+                                                        style="width: {{ isset($totalPerjalananUser) && $totalPerjalananUser > 0 ? (($perjalananDitolak ?? 0) / $totalPerjalananUser * 100) : 0 }}%">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="row mt-4">
             {{-- Chart: Statistik Perjalanan Dinas per Daerah Tujuan (Bulan Ini) --}}
             <div class="col-lg-7 mb-lg-0 mb-4">
@@ -326,28 +465,40 @@
         };
 
         document.addEventListener('DOMContentLoaded', function() {
-            var ctxDaerahTujuan = document.getElementById("chart-daerah-tujuan")?.getContext("2d");
-
+            var ctxDaerahTujuan = document.getElementById("chart-daerah-tujuan");
+            
+            // Debug: Check if canvas element exists
+            console.log("Canvas element:", ctxDaerahTujuan);
+            
             if (ctxDaerahTujuan) {
+                var ctx = ctxDaerahTujuan.getContext("2d");
                 var chartDaerahLabels = @json($chartDaerahLabels ?? []); // Data dari controller
                 var chartDaerahData = @json($chartDaerahData ?? []); // Data dari controller
+                
+                // Debug: Check if data is available
+                console.log("Chart Labels:", chartDaerahLabels);
+                console.log("Chart Data:", chartDaerahData);
 
                 if (chartDaerahLabels.length > 0 && chartDaerahData.length > 0) {
-                    new Chart(ctxDaerahTujuan, {
-                        type: "bar", // Changed to bar chart for this data type
+                    // Generate an array of colors for the pie chart segments
+                    var backgroundColors = [
+                        Charts.colors.theme.primary,
+                        Charts.colors.theme.success,
+                        Charts.colors.theme.info,
+                        Charts.colors.theme.warning,
+                        Charts.colors.theme.danger
+                    ];
+                    
+                    // Create the pie chart
+                    var chart = new Chart(ctx, {
+                        type: "pie", // Changed to pie chart
                         data: {
                             labels: chartDaerahLabels,
                             datasets: [{
-                                label: "Total Perjalanan", // Updated label
-                                tension: 0.4,
-                                borderWidth: 0, // Bar charts don't usually need a border width like lines
-                                borderRadius: 4, // Rounded bars
-                                pointRadius: 0,
-                                borderColor: Charts.colors.theme.primary,
-                                backgroundColor: Charts.colors.theme
-                                    .primary, // Solid color for bars
+                                label: "Total Perjalanan",
+                                backgroundColor: backgroundColors,
                                 data: chartDaerahData,
-                                maxBarThickness: 20 // Adjust bar thickness as needed
+                                borderWidth: 2,
                             }],
                         },
                         options: {
@@ -355,63 +506,44 @@
                             maintainAspectRatio: false,
                             plugins: {
                                 legend: {
-                                    display: false, // Hide legend if only one dataset
+                                    display: true,
+                                    position: 'right',
+                                    labels: {
+                                        boxWidth: 10,
+                                        font: {
+                                            size: 11,
+                                            family: "Open Sans"
+                                        }
+                                    }
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            var label = context.label || '';
+                                            var value = context.raw || 0;
+                                            var total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                            var percentage = Math.round((value / total) * 100);
+                                            return label + ': ' + value + ' (' + percentage + '%)';
+                                        }
+                                    }
                                 }
                             },
-                            interaction: {
-                                intersect: false,
-                                mode: 'index',
-                            },
-                            scales: {
-                                y: {
-                                    grid: {
-                                        drawBorder: false,
-                                        display: true,
-                                        drawOnChartArea: true,
-                                        drawTicks: false,
-                                        borderDash: [5, 5],
-                                        color: Charts.colors.gray[200]
-                                    },
-                                    ticks: {
-                                        display: true,
-                                        padding: 10,
-                                        color: Charts.colors.gray[600],
-                                        font: {
-                                            size: 11,
-                                            family: "Open Sans",
-                                            style: 'normal',
-                                            lineHeight: 2
-                                        },
-                                        precision: 0 // Only integer values for count
-                                    }
-                                },
-                                x: {
-                                    grid: {
-                                        drawBorder: false,
-                                        display: false, // Can hide x-axis grid lines for bar chart
-                                    },
-                                    ticks: {
-                                        display: true,
-                                        padding: 10,
-                                        color: Charts.colors.gray[700], // Darker for labels
-                                        font: {
-                                            size: 11,
-                                            family: "Open Sans",
-                                            style: 'normal',
-                                            lineHeight: 2
-                                        },
-                                    }
-                                },
-                            },
+                            cutout: '0%', // 0% for pie chart (would be higher for doughnut)
                         },
                     });
+                    
+                    // Debug: Check if chart was created
+                    console.log("Chart created:", chart);
                 } else {
-                    var chartContainer = document.getElementById("chart-daerah-tujuan")?.parentElement;
+                    console.log("No data available for chart");
+                    var chartContainer = document.getElementById("chart-daerah-tujuan").parentElement;
                     if (chartContainer) {
                         chartContainer.innerHTML =
                             "<p class='text-center p-5 text-muted'>Tidak ada data statistik daerah tujuan untuk ditampilkan.</p>";
                     }
                 }
+            } else {
+                console.error("Canvas element 'chart-daerah-tujuan' not found");
             }
         });
     </script>

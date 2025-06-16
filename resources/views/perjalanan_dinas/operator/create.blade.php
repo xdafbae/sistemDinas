@@ -1,19 +1,27 @@
-@extends('layouts.app')
+@extends('layouts.app') {{-- Sesuaikan dengan layout Argon Anda --}}
 
-@section('title', 'Buat Pengajuan Perjalanan Dinas - ' . config('app.name'))
-@section('page_name', 'Buat Pengajuan Perjalanan Dinas Baru')
+@section('title', 'Form Pengajuan Perjalanan Dinas - ' . config('app.name', 'Laravel'))
+@section('page_name', 'Pengajuan Perjalanan Dinas Baru')
 
 @push('styles')
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
     <style>
-        /* ... (Style Select2 seperti yang sudah ada di jawaban sebelumnya) ... */
+        /* Style untuk Select2 agar serasi dengan Argon */
         .select2-container--bootstrap-5 .select2-selection--multiple .select2-selection__rendered { padding-right: 2.5rem; padding-top: .3rem; padding-bottom: .3rem; }
-        .select2-container .select2-selection--multiple, .select2-container .select2-selection--single { min-height: calc(1.5em + 1rem + 2px); border-color: #d2d6da; padding-top: 0.375rem; padding-bottom: 0.375rem; }
+        .select2-container .select2-selection--multiple,
+        .select2-container .select2-selection--single { min-height: calc(1.5em + 1rem + 2px); border-color: #d2d6da; padding-top: 0.375rem; padding-bottom: 0.375rem; }
         .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered { line-height: 1.5; }
-        .select2-container--bootstrap-5.select2-container--focus .select2-selection, .select2-container--bootstrap-5.select2-container--open .select2-selection { border-color: #5e72e4; box-shadow: 0 0 0 0.2rem rgba(94, 114, 228, 0.25); }
-        select.is-invalid + .select2-container--bootstrap-5 .select2-selection { border-color: #fd5c70 !important; }
-        .form-control.is-invalid + .select2-container--bootstrap-5 .select2-selection { border-color: #fd5c70 !important; }
+        .select2-container--bootstrap-5.select2-container--focus .select2-selection,
+        .select2-container--bootstrap-5.select2-container--open .select2-selection { border-color: #5e72e4; box-shadow: 0 0 0 0.2rem rgba(94, 114, 228, 0.25); }
+        /* Styling untuk error pada Select2 */
+        select.is-invalid + .select2-container--bootstrap-5 .select2-selection,
+        .form-control.is-invalid + .select2-container--bootstrap-5 .select2-selection,
+        /* Target select dengan ID yang memiliki error */
+        #provinsi_tujuan_id.is-invalid + .select2-container--bootstrap-5 .select2-selection,
+        #personil_ids.is-invalid + .select2-container--bootstrap-5 .select2-selection {
+             border-color: #fd5c70 !important;
+        }
         .select2-container--bootstrap-5 .select2-selection--multiple .select2-search__field { margin-top: 0.5rem; }
     </style>
 @endpush
@@ -86,13 +94,13 @@
                         <div class="row" id="lokasi-tujuan-sbu-group">
                             <div class="col-md-6 mb-3" id="provinsi-tujuan-group">
                                 <label for="provinsi_tujuan_id" class="form-label">Provinsi Tujuan (Sesuai SBU) <span id="provinsi_required_star" class="text-danger" style="display:none;">*</span></label>
-                                <select class="form-select select2-single @error('provinsi_tujuan_id') is-invalid @enderror" id="provinsi_tujuan_id" name="provinsi_tujuan_id">
-                                    <option value=""></option>
+                                <select class="form-select select2-single @error('provinsi_tujuan_id') is-invalid @enderror" id="provinsi_tujuan_id" name="provinsi_tujuan_id"> {{-- Nama KEMBALI ke provinsi_tujuan_id --}}
+                                    <option value=""></option> {{-- Option kosong untuk placeholder Select2 --}}
                                     @foreach ($provinsis ?? [] as $provKey => $provName)
                                         <option value="{{ $provKey }}" {{ old('provinsi_tujuan_id') == $provKey ? 'selected' : '' }}>{{ $provName }}</option>
                                     @endforeach
                                 </select>
-                                @error('provinsi_tujuan_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                @error('provinsi_tujuan_id') <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
                             </div>
                             <div class="col-md-6 mb-3" id="kota-tujuan-group" style="display:none;">
                                 <label for="kota_tujuan_id" class="form-label">Kota/Kabupaten Tujuan (Sesuai SBU)</label>
@@ -100,7 +108,6 @@
                                 @error('kota_tujuan_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
                             </div>
                         </div>
-                        {{-- Input untuk Transportasi Internal Siak (Kecamatan, Desa, Jarak) --}}
                         <div class="row" id="transportasi-internal-group" style="display:none;">
                             <div class="col-md-4 mb-3">
                                 <label for="kecamatan_tujuan_id" class="form-label">Kecamatan Tujuan (di Siak)</label>
@@ -155,18 +162,17 @@
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label for="jumlah_taksi_di_tujuan" class="form-label">Jumlah Taksi di Tujuan (Kali)</label>
-                                <input type="number" class="form-control @error('jumlah_taksi_di_tujuan') is-invalid @enderror" id="jumlah_taksi_di_tujuan" name="jumlah_taksi_di_tujuan" value="{{ old('jumlah_taksi_di_tujuan', 0) }}" min="0" max="4">
+                                <input type="number" class="form-control @error('jumlah_taksi_di_tujuan') is-invalid @enderror" id="jumlah_taksi_di_tujuan" name="jumlah_taksi_di_tujuan" value="{{ old('jumlah_taksi_di_tujuan', 0) }}" min="0" max="10">
                                 @error('jumlah_taksi_di_tujuan') <div class="invalid-feedback">{{ $message }}</div> @enderror
                             </div>
                         </div>
-                        <div class="row">
+                         <div class="row">
                             <div class="col-md-12 mb-3">
                                 <label for="alat_angkut_lainnya" class="form-label">Detail Alat Angkut Lainnya / Catatan Transportasi</label>
                                 <input type="text" class="form-control @error('alat_angkut_lainnya') is-invalid @enderror" id="alat_angkut_lainnya" name="alat_angkut_lainnya" value="{{ old('alat_angkut_lainnya', 'Kendaraan Dinas/Umum') }}" placeholder="Misal: Kendaraan Dinas Avanza BM XXXX XX, Travel XYZ">
                                 @error('alat_angkut_lainnya') <div class="invalid-feedback">{{ $message }}</div> @enderror
                             </div>
                         </div>
-
 
                         <h6 class="mt-4 text-sm font-weight-bold">Informasi Pelaksana</h6>
                         <hr class="horizontal dark mt-1 mb-3">
@@ -223,41 +229,69 @@
                 });
             }
 
-            initSelect2('#provinsi_tujuan_id', 'Pilih Provinsi Tujuan (Sesuai SBU)...', true);
+            initSelect2('#provinsi_tujuan_id_select', 'Pilih Provinsi Tujuan (Sesuai SBU)...', true); // Target ID select yang baru
             initSelect2('#personil_ids', 'Pilih satu atau lebih personil...');
+
 
             $('#jenis_spt').on('change', function() {
                 var jenis = $(this).val();
-                var provinsiDropdown = $('#provinsi_tujuan_id');
+                var provinsiSelectEl = $('#provinsi_tujuan_id_select'); // Target ID select yang baru
+                var provinsiHiddenEl = $('#provinsi_tujuan_id_hidden');
                 var kotaGroup = $('#kota-tujuan-group');
                 var provinsiRequiredStar = $('#provinsi_required_star');
                 var transportasiInternalGroup = $('#transportasi-internal-group');
 
                 // Reset dan enable semua field terkait lokasi dulu
-                provinsiDropdown.val(null).trigger('change').prop('disabled', false);
+                provinsiSelectEl.val(null).trigger('change').prop('disabled', false);
+                provinsiHiddenEl.val('');
                 $('#kota_tujuan_id').val('');
                 kotaGroup.hide();
                 provinsiRequiredStar.hide();
-                transportasiInternalGroup.hide().find('input').val(''); // Sembunyikan dan reset input internal
+                transportasiInternalGroup.hide().find('input').val('');
 
-                if (jenis === 'dalam_daerah') {
-                    provinsiDropdown.val('RIAU').trigger('change').prop('disabled', true);
-                    // Untuk "Dalam Daerah", tampilkan input transportasi internal
-                    transportasiInternalGroup.show();
-                    // kota_tujuan_id bisa diset default ke SIAK jika perjalanan DALAM KABUPATEN SIAK
-                    $('#kota_tujuan_id').val('SIAK'); // Default
-                    // kotaGroup bisa tetap disembunyikan atau ditampilkan tapi disabled
-                    // kotaGroup.show().find('input').prop('disabled', true);
-                } else if (jenis === 'luar_daerah_dalam_provinsi') {
-                    provinsiDropdown.val('RIAU').trigger('change').prop('disabled', true);
-                    kotaGroup.show().find('input').prop('disabled', false); // Kota tujuan di Riau bisa diisi
+
+                if (jenis === 'dalam_daerah' || jenis === 'luar_daerah_dalam_provinsi') {
+                    provinsiSelectEl.val('RIAU').trigger('change').prop('disabled', true);
+                    provinsiHiddenEl.val('RIAU'); // Set nilai hidden input
+                    if(jenis === 'luar_daerah_dalam_provinsi'){
+                        kotaGroup.show().find('input').prop('disabled', false);
+                    } else { // dalam_daerah
+                        transportasiInternalGroup.show();
+                        $('#kota_tujuan_id').val('SIAK'); // Bisa diisi default
+                        // kotaGroup.show().find('input').prop('disabled', true); // Kota bisa di-set Siak dan disable
+                    }
                 } else if (jenis === 'luar_daerah_luar_provinsi') {
                     provinsiRequiredStar.show();
                     kotaGroup.show().find('input').prop('disabled', false);
+                    provinsiHiddenEl.val(''); // Pastikan hidden kosong agar nilai dari select yang dipakai
+                } else {
+                    provinsiHiddenEl.val(''); // Kosongkan jika tidak ada jenis SPT dipilih
                 }
-            }).trigger('change');
+            }).trigger('change'); // Trigger saat load untuk set kondisi awal
 
-            function hitungLamaHari() { /* ... (fungsi hitungLamaHari sama seperti sebelumnya) ... */ }
+            function hitungLamaHari() {
+                var tglMulaiVal = $('#tanggal_mulai').val();
+                var tglSelesaiVal = $('#tanggal_selesai').val();
+                var tglSelesaiEl = $('#tanggal_selesai')[0];
+
+                if (tglMulaiVal && tglSelesaiVal) {
+                    var mulai = new Date(tglMulaiVal);
+                    var selesai = new Date(tglSelesaiVal);
+
+                    if (selesai >= mulai) {
+                        var diffTime = Math.abs(selesai - mulai);
+                        var diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                        $('#lama-hari-text').text(diffDays);
+                        tglSelesaiEl.setCustomValidity("");
+                    } else {
+                        $('#lama-hari-text').text('INVALID');
+                         tglSelesaiEl.setCustomValidity("Tanggal selesai tidak boleh sebelum tanggal mulai.");
+                    }
+                } else {
+                    $('#lama-hari-text').text('0');
+                    tglSelesaiEl.setCustomValidity("");
+                }
+            }
             $('#tanggal_mulai, #tanggal_selesai').on('change input', hitungLamaHari);
             hitungLamaHari();
         });

@@ -1,14 +1,16 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\HomeController;
+use App\Http\Controllers\Admin\SbuController;
 use App\Http\Controllers\Admin\UserController;
-use App\Http\Controllers\Auth\LoginController;    // Pastikan controller ini ada jika Anda membuat auth manual
-use App\Http\Controllers\Auth\RegisterController;  // Pastikan controller ini ada jika Anda membuat auth manual
-use App\Http\Controllers\HomeController;           // Controller untuk dashboard/home
-use App\Http\Controllers\PerjalananDinasController;           // Controller untuk dashboard/home
-use App\Http\Controllers\Verifikasi\VerifikasiPerjalananDinasController;           // Controller untuk dashboard/home
-use App\Http\Controllers\Persetujuan\PersetujuanPerjalananDinasController;          // Controller untuk dashboard/home
+use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\PerjalananDinasController;
 use App\Http\Controllers\DokumenPerjalananDinasController;
+use App\Http\Controllers\LaporanPerjalananDinasPegawaiController;
+use App\Http\Controllers\Verifikasi\VerifikasiPerjalananDinasController;
+use App\Http\Controllers\Persetujuan\PersetujuanPerjalananDinasController;
+use App\Http\Controllers\Auth\RegisterController; // Jika Anda menggunakannya
 
 /*
 |--------------------------------------------------------------------------
@@ -16,99 +18,138 @@ use App\Http\Controllers\DokumenPerjalananDinasController;
 |--------------------------------------------------------------------------
 */
 
-// Route untuk halaman utama/landing page (bisa diakses siapa saja)
+// Route untuk halaman utama/landing page
 Route::get('/', function () {
-    // Jika user sudah login, arahkan ke home, jika belum, tampilkan welcome page
     if (auth()->check()) {
         return redirect()->route('home');
     }
-    return view('welcome'); // Pastikan view 'welcome.blade.php' ada
+    return view('welcome');
 })->name('welcome');
 
-
-// --- Rute Autentikasi Manual ---
+// --- Rute Autentikasi ---
 Route::middleware('guest')->group(function () {
-    // Aktifkan jika Anda memiliki fitur registrasi publik
     // Route::get('register', [RegisterController::class, 'showRegistrationForm'])->name('register');
     // Route::post('register', [RegisterController::class, 'register']);
-
     Route::get('login', [LoginController::class, 'showLoginForm'])->name('login');
     Route::post('login', [LoginController::class, 'login']);
 });
-
 Route::post('logout', [LoginController::class, 'logout'])->name('logout')->middleware('auth');
-// --- Akhir Rute Autentikasi Manual ---
+// --- Akhir Rute Autentikasi ---
 
 
-// --- Rute yang Memerlukan Autentikasi (Umum) ---
+// --- SEMUA ROUTE YANG MEMERLUKAN AUTENTIKASI MASUK KE GRUP INI ---
 Route::middleware(['auth'])->group(function () {
-    // Route untuk halaman home/dashboard setelah login
-    // URL akan menjadi /home
-    Route::get('/home', [HomeController::class, 'index'])->name('home');
 
-    // Route lain yang bisa diakses semua user terautentikasi bisa ditaruh di sini
-    // Contoh: Route::get('/profile', [ProfileController::class, 'show'])->name('profile.show');
+    // Dashboard Utama
+    Route::get('/home', [HomeController::class, 'index'])->name('home');
 
     // --- Rute Operator untuk Perjalanan Dinas ---
     Route::prefix('operator/perjalanan-dinas')
         ->name('operator.perjalanan-dinas.')
-        ->middleware('role:operator|superadmin') // Pastikan role 'operator' ada dan di-assign
+        ->middleware('role:operator|superadmin')
         ->group(function () {
             Route::get('/', [PerjalananDinasController::class, 'index'])->name('index');
             Route::get('/create', [PerjalananDinasController::class, 'create'])->name('create');
             Route::post('/', [PerjalananDinasController::class, 'store'])->name('store');
-            Route::get('/{perjalananDinas}', [PerjalananDinasController::class, 'show'])->name('show'); // Route model binding
+            Route::get('/{perjalananDinas}', [PerjalananDinasController::class, 'show'])->name('show');
             Route::get('/{perjalananDinas}/edit', [PerjalananDinasController::class, 'edit'])->name('edit');
             Route::put('/{perjalananDinas}', [PerjalananDinasController::class, 'update'])->name('update');
             Route::delete('/{perjalananDinas}', [PerjalananDinasController::class, 'destroy'])->name('destroy');
-
-            // Opsional: Jika Anda membuat endpoint AJAX terpisah untuk hitung estimasi
-            // Route::post('/hitung-estimasi', [PerjalananDinasController::class, 'hitungEstimasiAjax'])->name('hitung-estimasi-ajax');
         });
-    // --- Akhir Rute Operator ---
 
-    Route::prefix('verifikator/perjalanan-dinas')
-        ->name('verifikator.perjalanan-dinas.')
-        ->middleware('role:verifikator|superadmin') // Pastikan role 'verifikator' ada
+    // --- Rute Verifikator untuk Perjalanan Dinas ---
+    // --- Rute Verifikator ---
+    // --- Rute Verifikator ---
+    Route::prefix('verifikator')
+        ->middleware('role:verifikator|superadmin')
         ->group(function () {
-            Route::get('/', [VerifikasiPerjalananDinasController::class, 'index'])->name('index');
-            Route::get('/{perjalananDinas}', [VerifikasiPerjalananDinasController::class, 'show'])->name('show'); // Route model binding
-            Route::post('/{perjalananDinas}/process', [VerifikasiPerjalananDinasController::class, 'processVerification'])->name('process');
+            // Grup untuk verifikasi SPT awal
+            Route::prefix('perjalanan-dinas')
+                ->name('verifikator.perjalanan-dinas.') // Hanya untuk SPT
+                ->group(function () {
+                    Route::get('/', [VerifikasiPerjalananDinasController::class, 'index'])->name('index');
+                    Route::get('/{perjalananDinas}', [VerifikasiPerjalananDinasController::class, 'show'])->name('show');
+                    Route::post('/{perjalananDinas}/process', [VerifikasiPerjalananDinasController::class, 'processVerification'])->name('process');
+                });
+
+            // Grup BARU untuk verifikasi Laporan Perjalanan Dinas
+            Route::prefix('laporan-perjadin')
+                ->name('verifikator.laporan-perjadin.') // Nama route baru yang lebih pendek
+                ->group(function () {
+                    Route::get('/', [VerifikasiPerjalananDinasController::class, 'indexLaporan'])->name('index'); // Sekarang menjadi verifikator.laporan-perjadin.index
+                    Route::get('/{laporan}', [VerifikasiPerjalananDinasController::class, 'showLaporan'])->name('show');
+                    Route::post('/{laporan}/process', [VerifikasiPerjalananDinasController::class, 'processLaporan'])->name('process');
+                });
         });
-
-    Route::middleware(['auth'])->group(function () {
-        // ...
-
-        // --- Rute Atasan untuk Perjalanan Dinas ---
-        Route::prefix('atasan/perjalanan-dinas')
-            ->name('atasan.perjalanan-dinas.')
-            ->middleware(['auth', 'role:atasan']) // TAMBAHKAN |superadmin
-            ->group(function () {
-                Route::get('/', [PersetujuanPerjalananDinasController::class, 'index'])->name('index');
-                Route::get('/{perjalananDinas}', [PersetujuanPerjalananDinasController::class, 'show'])->name('show');
-                Route::post('/{perjalananDinas}/process', [PersetujuanPerjalananDinasController::class, 'processApproval'])->name('process');
-            });
-        // --- Akhir Rute Atasan ---
-    });
-
-    Route::prefix('dokumen-perjalanan-dinas')->name('dokumen.')->group(function () {
-        Route::get('/', [DokumenPerjalananDinasController::class, 'index'])->name('index');
-        // Tambahkan parameter {format?} opsional dengan default 'pdf'
-        Route::get('/spt/{perjalananDinas}/download/{format?}', [DokumenPerjalananDinasController::class, 'downloadSPT'])->name('spt.download');
-        Route::get('/sppd/{perjalananDinas}/download/{format?}', [DokumenPerjalananDinasController::class, 'downloadSPPD'])->name('sppd.download');
-        Route::get('/spt/{perjalananDinas}/download-from-scratch', [DokumenPerjalananDinasController::class, 'downloadSPTDariNol'])->name('spt.download.fromscratch');
-        Route::get('/sppd/{perjalananDinas}/download-from-scratch', [DokumenPerjalananDinasController::class, 'downloadSPPDDariNol'])->name('sppd.download.fromscratch');
-    });
+    // --- Akhir Rute Verifikator ---
+    // ...
 });
-// --- Akhir Rute yang Memerlukan Autentikasi (Umum) ---
-
-
-// --- Rute Administrasi (Memerlukan Autentikasi DAN Permission Spesifik) ---
-Route::middleware(['auth', 'can:manage users']) // Pertama cek login, lalu cek permission
-    ->prefix('admin')                         // URL: /admin/...
-    ->name('admin.')                          // Nama route: admin....
+// --- Rute Atasan untuk Perjalanan Dinas ---
+// Grup middleware auth di dalam grup auth lain dihapus karena tidak perlu
+Route::prefix('atasan/perjalanan-dinas')
+    ->name('atasan.perjalanan-dinas.')
+    ->middleware('role:atasan|kepala dinas|superadmin') // Kepala Dinas juga bisa jadi atasan
     ->group(function () {
-
-        Route::resource('users', UserController::class);
+        Route::get('/', [PersetujuanPerjalananDinasController::class, 'index'])->name('index');
+        Route::get('/{perjalananDinas}', [PersetujuanPerjalananDinasController::class, 'show'])->name('show');
+        Route::post('/{perjalananDinas}/process', [PersetujuanPerjalananDinasController::class, 'processApproval'])->name('process');
     });
+
+// --- Rute Download Dokumen Perjalanan Dinas ---
+Route::prefix('dokumen-perjalanan-dinas')->name('dokumen.')->group(function () {
+    Route::get('/', [DokumenPerjalananDinasController::class, 'index'])->name('index');
+    Route::get('/spt/{perjalananDinas}/download/{format?}', [DokumenPerjalananDinasController::class, 'downloadSPT'])->name('spt.download');
+    Route::get('/sppd/{perjalananDinas}/download/{format?}', [DokumenPerjalananDinasController::class, 'downloadSPPD'])->name('sppd.download');
+    // Route untuk "from scratch" bisa Anda hapus jika sudah menggunakan TemplateProcessor untuk Word
+    // Route::get('/spt/{perjalananDinas}/download-from-scratch', [DokumenPerjalananDinasController::class, 'downloadSPTDariNol'])->name('spt.download.fromscratch');
+    // Route::get('/sppd/{perjalananDinas}/download-from-scratch', [DokumenPerjalananDinasController::class, 'downloadSPPDDariNol'])->name('sppd.download.fromscratch');
+});
+
+// --- Rute Laporan SPT ---
+Route::prefix('laporan')
+    ->name('laporan.')
+    ->middleware('role:superadmin|operator|atasan|verifikator|kepala dinas')
+    ->group(function () {
+        Route::get('/spt', [DokumenPerjalananDinasController::class, 'laporanSPT'])->name('spt.index');
+        Route::get('/spt/data', [DokumenPerjalananDinasController::class, 'dataTableSPT'])->name('spt.data');
+    });
+
+
+// --- Rute Administrasi ---
+Route::prefix('admin')->name('admin.')->group(function () {
+    // Manajemen User (memerlukan permission 'manage users')
+    Route::resource('users', UserController::class)->middleware('can:manage users');
+
+    // Manajemen SBU (hanya superadmin atau yang punya permission 'manage sbu')
+    Route::middleware('can:manage sbu') // Atau 'role:superadmin' jika lebih sederhana
+        ->prefix('sbu')
+        ->name('sbu.')
+        ->group(function () {
+            // Route resource untuk CRUD SBU
+            // Jika SbuController Anda menggunakan 'SbuItem $sbuItem', maka gunakan parameters()
+            Route::resource('/', SbuController::class)->except(['show'])->parameters(['' => 'sbuItem']);
+            // Jika SbuController Anda menggunakan 'SbuItem $sbu', maka:
+            // Route::resource('/', SbuController::class)->except(['show']);
+
+            // Route untuk Import SBU
+            Route::get('/import', [SbuController::class, 'showImportForm'])->name('import.form');
+            Route::post('/import', [SbuController::class, 'importSbu'])->name('import.process');
+            Route::get('/download-template', [SbuController::class, 'downloadSbuTemplate'])->name('download.template');
+        });
+});
 // --- Akhir Rute Administrasi ---
+
+// --- Rute Laporan Perjalanan Dinas oleh Pegawai ---
+Route::prefix('pegawai/laporan-perjalanan-dinas')
+    ->name('pegawai.laporan-perjadin.')
+    // Middleware role 'pegawai' atau role lain yang berhak membuat laporan
+    // Otorisasi lebih detail akan dilakukan di controller (memastikan user adalah pelaksana)
+    ->group(function () {
+        Route::get('/', [LaporanPerjalananDinasPegawaiController::class, 'index'])->name('index');
+        // Menggunakan perjalananDinas ID untuk konsistensi URL dengan daftar perjalanan
+        Route::get('/{perjalananDinas}/buat-atau-edit', [LaporanPerjalananDinasPegawaiController::class, 'createOrEdit'])->name('createOrEdit');
+        Route::post('/{perjalananDinas}/simpan', [LaporanPerjalananDinasPegawaiController::class, 'storeOrUpdate'])->name('storeOrUpdate');
+        Route::get('/{perjalananDinas}/lihat', [LaporanPerjalananDinasPegawaiController::class, 'showLaporan'])->name('show');
+        // Menggunakan LaporanPerjalananDinas ID untuk submit
+        Route::patch('/{laporan}/submit', [LaporanPerjalananDinasPegawaiController::class, 'submitLaporan'])->name('submit');
+    });

@@ -2,13 +2,15 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-// Pastikan use statement ini ada jika belum
 use App\Models\PerjalananDinasBiaya;
+use App\Models\LaporanPerjalananDinas;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+// Pastikan use statement ini ada jika belum
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use App\Models\User; // Pastikan User model juga di-import jika belum
 
 class PerjalananDinas extends Model
@@ -27,7 +29,7 @@ class PerjalananDinas extends Model
         'kota_tujuan_id',
         'dasar_spt',
         'uraian_spt',
-        'alat_angkut', 
+        'alat_angkut',
         'lama_hari',
         'tanggal_mulai',
         'tanggal_selesai',
@@ -77,5 +79,20 @@ class PerjalananDinas extends Model
     {
         // Ini adalah relasi yang menggunakan model PerjalananDinasBiaya
         return $this->hasMany(PerjalananDinasBiaya::class, 'perjalanan_dinas_id');
+    }
+
+    public function laporanUtama(): HasOne // Menggunakan HasOne jika satu perjalanan dinas punya satu laporan utama
+    {
+        return $this->hasOne(LaporanPerjalananDinas::class, 'perjalanan_dinas_id')->latestOfMany();
+        // Jika Anda ingin mengambil laporan yang dibuat oleh user yang sedang login (jika dia pelaksana)
+        // public function laporanOlehCurrentUser(): HasOne
+        // {
+        //     return $this->hasOne(LaporanPerjalananDinas::class, 'perjalanan_dinas_id')->where('user_id', auth()->id());
+        // }
+    }
+
+    public function semuaLaporan(): HasMany
+    {
+        return $this->hasMany(LaporanPerjalananDinas::class, 'perjalanan_dinas_id');
     }
 }

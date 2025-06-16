@@ -52,4 +52,22 @@ class User extends Authenticatable
         'aktif' => 'boolean', // <-- TAMBAHKAN INI
         'password' => 'hashed', // Jika menggunakan Laravel 9+
     ];
+    
+    /**
+     * Get the perjalanan dinas that the user is part of.
+     */
+    public function perjalananDinas()
+    {
+        return $this->belongsToMany(PerjalananDinas::class, 'perjalanan_dinas_personil', 'user_id', 'perjalanan_dinas_id');
+    }
+    
+    /**
+     * Get the perjalanan dinas that the user created as an operator.
+     */
+    public function perjalananDinasCreated()
+    {
+        return $this->hasMany(PerjalananDinas::class, 'operator_id');
+    }
+
+    
 }

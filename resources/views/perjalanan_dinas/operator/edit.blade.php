@@ -256,9 +256,31 @@
                 }
             }).trigger('change');
 
-            function hitungLamaHari() { /* ... (fungsi hitungLamaHari sama seperti di create.blade.php) ... */ }
+             function hitungLamaHari() {
+                var tglMulaiVal = $('#tanggal_mulai').val();
+                var tglSelesaiVal = $('#tanggal_selesai').val();
+                var tglSelesaiEl = $('#tanggal_selesai')[0];
+
+                if (tglMulaiVal && tglSelesaiVal) {
+                    var mulai = new Date(tglMulaiVal);
+                    var selesai = new Date(tglSelesaiVal);
+
+                    if (selesai >= mulai) {
+                        var diffTime = Math.abs(selesai - mulai);
+                        var diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                        $('#lama-hari-text').text(diffDays);
+                        tglSelesaiEl.setCustomValidity("");
+                    } else {
+                        $('#lama-hari-text').text('INVALID');
+                         tglSelesaiEl.setCustomValidity("Tanggal selesai tidak boleh sebelum tanggal mulai.");
+                    }
+                } else {
+                    $('#lama-hari-text').text('0');
+                    tglSelesaiEl.setCustomValidity("");
+                }
+            }
             $('#tanggal_mulai, #tanggal_selesai').on('change input', hitungLamaHari);
-            hitungLamaHari(); // Hitung saat load
+            hitungLamaHari();
         });
     </script>
 @endpush
