@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\PerjalananDinasController;
 use App\Http\Controllers\DokumenPerjalananDinasController;
 use App\Http\Controllers\LaporanPerjalananDinasPegawaiController;
+use App\Http\Controllers\Admin\MonitoringPerjalananDinasController;
 use App\Http\Controllers\Verifikasi\VerifikasiPerjalananDinasController;
 use App\Http\Controllers\Persetujuan\PersetujuanPerjalananDinasController;
 use App\Http\Controllers\Auth\RegisterController; // Jika Anda menggunakannya
@@ -136,7 +137,21 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/import', [SbuController::class, 'importSbu'])->name('import.process');
             Route::get('/download-template', [SbuController::class, 'downloadSbuTemplate'])->name('download.template');
         });
+
+        // Monitoring Perjalanan Dinas
+        Route::prefix('monitoring')
+            ->name('monitoring.')
+            ->middleware('role:atasan|kepala dinas|superadmin')
+            ->group(function() {
+                Route::get('/perjalanan-dinas', [MonitoringPerjalananDinasController::class, 'index'])->name('perjadin.index');
+                // Jika ada halaman detail untuk monitoring:
+                // Route::get('/perjalanan-dinas/{perjalananDinas}', [MonitoringPerjalananDinasController::class, 'show'])->name('perjadin.show');
+            });
+    
+    // --- Akhir Rute Monitoring ---
 });
+
+
 // --- Akhir Rute Administrasi ---
 
 // --- Rute Laporan Perjalanan Dinas oleh Pegawai ---
@@ -153,3 +168,5 @@ Route::prefix('pegawai/laporan-perjalanan-dinas')
         // Menggunakan LaporanPerjalananDinas ID untuk submit
         Route::patch('/{laporan}/submit', [LaporanPerjalananDinasPegawaiController::class, 'submitLaporan'])->name('submit');
     });
+
+    

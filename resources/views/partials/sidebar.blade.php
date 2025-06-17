@@ -126,7 +126,7 @@
                 </li>
             @endauth
             {{-- Laporan Perjalanan Dinas --}}
-            @if (Auth::user()->hasAnyRole(['pegawai','kepala dinas', 'superadmin']))
+            @if (Auth::user()->hasAnyRole(['pegawai', 'kepala dinas', 'superadmin']))
                 <li class="nav-item">
                     <a class="nav-link" href="{{ route('pegawai.laporan-perjadin.index') }}">
                         <div
@@ -152,91 +152,92 @@
             @endhasanyrole
 
             {{-- Monitoring Semua Perjalanan (Superadmin saja) --}}
-            @hasrole('superadmin')
+            @hasanyrole('atasan|kepala dinas|superadmin')
                 <li class="nav-item">
-                    <a class="nav-link" href="#">
+                    <a class="nav-link {{ Route::is('admin.monitoring.perjadin.*') ? 'active' : '' }}"
+                        href="{{ route('admin.monitoring.perjadin.index') }}">
                         <div
-                            class="icon icon-shape icon-sm text-center me-2 d-flex align-items-center justify-content-center">
+                            class="icon icon-shape icon-sm border-radius-md text-center me-2 d-flex align-items-center justify-content-center">
                             <i class="ni ni-archive-2 text-danger text-sm opacity-10"></i>
                         </div>
-                        <span class="nav-link-text ms-1">Monitoring Semua Perjadin</span>
+                        <span class="nav-link-text ms-1">Monitoring Perjadin</span>
                     </a>
                 </li>
-            @endhasrole
+                @endhasanyrole
 
-            {{-- Administrasi Sistem --}}
-            @can('manage users')
-                <li class="nav-item mt-3">
-                    <h6 class="ps-4 ms-2 text-uppercase text-xs font-weight-bolder opacity-6">Administrasi Sistem</h6>
-                </li>
-                <li class="nav-item">
-                    <a data-bs-toggle="collapse" href="#usersManajemenSubmenu"
-                        class="nav-link {{ Request::is('admin/users*') || Request::is('admin/roles*') ? 'active' : '' }}"
-                        aria-controls="usersManajemenSubmenu" role="button"
-                        aria-expanded="{{ Request::is('admin/users*') || Request::is('admin/roles*') ? 'true' : 'false' }}">
-                        <div
-                            class="icon icon-shape icon-sm text-center me-2 d-flex align-items-center justify-content-center">
-                            <i class="ni ni-circle-08 text-warning text-sm opacity-10"></i>
-                        </div>
-                        <span class="nav-link-text ms-1">Manajemen Pengguna</span>
-                    </a>
-                    <div class="collapse {{ Request::is('admin/users*') || Request::is('admin/roles*') ? 'show' : '' }}"
-                        id="usersManajemenSubmenu">
-                        <ul class="nav ms-4 ps-3">
-                            <li class="nav-item">
-                                <a class="nav-link {{ Request::is('admin/users*') ? 'active' : '' }}"
-                                    href="{{ route('admin.users.index') }}">
-                                    <span class="sidenav-mini-icon"> U </span>
-                                    <span class="sidenav-normal"> Daftar Pengguna </span>
-                                </a>
-                            </li>
-                        </ul>
-                    </div>
-                </li>
-
-                {{-- Manajemen SBU (Hanya Superadmin) --}}
-                @hasrole('superadmin')
+                {{-- Administrasi Sistem --}}
+                @can('manage users')
+                    <li class="nav-item mt-3">
+                        <h6 class="ps-4 ms-2 text-uppercase text-xs font-weight-bolder opacity-6">Administrasi Sistem</h6>
+                    </li>
                     <li class="nav-item">
-                        <a class="nav-link {{ Route::is('admin.sbu.*') ? 'active' : '' }}"
-                            href="{{ route('admin.sbu.index') }}">
+                        <a data-bs-toggle="collapse" href="#usersManajemenSubmenu"
+                            class="nav-link {{ Request::is('admin/users*') || Request::is('admin/roles*') ? 'active' : '' }}"
+                            aria-controls="usersManajemenSubmenu" role="button"
+                            aria-expanded="{{ Request::is('admin/users*') || Request::is('admin/roles*') ? 'true' : 'false' }}">
                             <div
                                 class="icon icon-shape icon-sm text-center me-2 d-flex align-items-center justify-content-center">
-                                <i class="ni ni-money-coins text-success text-sm opacity-10"></i>
+                                <i class="ni ni-circle-08 text-warning text-sm opacity-10"></i>
                             </div>
-                            <span class="nav-link-text ms-1">Manajemen SBU</span>
+                            <span class="nav-link-text ms-1">Manajemen Pengguna</span>
+                        </a>
+                        <div class="collapse {{ Request::is('admin/users*') || Request::is('admin/roles*') ? 'show' : '' }}"
+                            id="usersManajemenSubmenu">
+                            <ul class="nav ms-4 ps-3">
+                                <li class="nav-item">
+                                    <a class="nav-link {{ Request::is('admin/users*') ? 'active' : '' }}"
+                                        href="{{ route('admin.users.index') }}">
+                                        <span class="sidenav-mini-icon"> U </span>
+                                        <span class="sidenav-normal"> Daftar Pengguna </span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+
+                    {{-- Manajemen SBU (Hanya Superadmin) --}}
+                    @hasrole('superadmin')
+                        <li class="nav-item">
+                            <a class="nav-link {{ Route::is('admin.sbu.*') ? 'active' : '' }}"
+                                href="{{ route('admin.sbu.index') }}">
+                                <div
+                                    class="icon icon-shape icon-sm text-center me-2 d-flex align-items-center justify-content-center">
+                                    <i class="ni ni-money-coins text-success text-sm opacity-10"></i>
+                                </div>
+                                <span class="nav-link-text ms-1">Manajemen SBU</span>
+                            </a>
+                        </li>
+                    @endhasrole
+                @endcan
+
+                {{-- Akun Saya --}}
+                <li class="nav-item mt-3">
+                    <h6 class="ps-4 ms-2 text-uppercase text-xs font-weight-bolder opacity-6">Akun Saya</h6>
+                </li>
+                @auth
+                    <li class="nav-item">
+                        <a class="nav-link" href="#">
+                            <div
+                                class="icon icon-shape icon-sm text-center me-2 d-flex align-items-center justify-content-center">
+                                <i class="ni ni-single-02 text-dark text-sm opacity-10"></i>
+                            </div>
+                            <span class="nav-link-text ms-1">Profil Saya</span>
                         </a>
                     </li>
-                @endhasrole
-            @endcan
-
-            {{-- Akun Saya --}}
-            <li class="nav-item mt-3">
-                <h6 class="ps-4 ms-2 text-uppercase text-xs font-weight-bolder opacity-6">Akun Saya</h6>
-            </li>
-            @auth
+                @endauth
                 <li class="nav-item">
-                    <a class="nav-link" href="#">
+                    <a class="nav-link" href="#"
+                        onclick="event.preventDefault(); document.getElementById('logout-form-sidebar').submit();">
                         <div
                             class="icon icon-shape icon-sm text-center me-2 d-flex align-items-center justify-content-center">
-                            <i class="ni ni-single-02 text-dark text-sm opacity-10"></i>
+                            <i class="ni ni-button-power text-danger text-sm opacity-10"></i>
                         </div>
-                        <span class="nav-link-text ms-1">Profil Saya</span>
+                        <span class="nav-link-text ms-1">Keluar</span>
                     </a>
+                    <form id="logout-form-sidebar" action="{{ route('logout') }}" method="POST" class="d-none">
+                        @csrf
+                    </form>
                 </li>
-            @endauth
-            <li class="nav-item">
-                <a class="nav-link" href="#"
-                    onclick="event.preventDefault(); document.getElementById('logout-form-sidebar').submit();">
-                    <div
-                        class="icon icon-shape icon-sm text-center me-2 d-flex align-items-center justify-content-center">
-                        <i class="ni ni-button-power text-danger text-sm opacity-10"></i>
-                    </div>
-                    <span class="nav-link-text ms-1">Keluar</span>
-                </a>
-                <form id="logout-form-sidebar" action="{{ route('logout') }}" method="POST" class="d-none">
-                    @csrf
-                </form>
-            </li>
-        </ul>
-    </div>
-</aside>
+            </ul>
+        </div>
+    </aside>
